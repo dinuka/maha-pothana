@@ -4,7 +4,6 @@
 
 ```
 apps/web      — Next.js App Router, port 3000
-apps/docs     — Next.js App Router, port 3001
 packages/ui   — @repo/ui (shared React components, named exports via "./*" → "./src/*.tsx")
 packages/eslint-config — @repo/eslint-config (flat config, ESLint 9)
 packages/typescript-config — @repo/typescript-config
@@ -14,7 +13,7 @@ packages/typescript-config — @repo/typescript-config
 
 | Command | Effect |
 |---------|--------|
-| `pnpm dev` | Start all dev servers (web:3000, docs:3001) |
+| `pnpm dev` | Start all dev servers (web:3000) |
 | `pnpm build` | Build all packages & apps |
 | `pnpm lint` | Turbo lint (strict: `--max-warnings 0`) |
 | `pnpm check-types` | Turbo typecheck (`next typegen && tsc --noEmit`) |
