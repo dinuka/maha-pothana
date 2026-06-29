@@ -1,159 +1,103 @@
-# Turborepo starter
+# Maha Pothana
 
-This Turborepo starter is maintained by the Turborepo core team.
+A collaborative book translation platform. Translators work on sections of digitized book pages to produce translated versions in target languages.
 
-## Using this example
+## Tech Stack
 
-Run the following command:
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16 (App Router), TypeScript 6 |
+| Backend | FastAPI, Python 3.12+, Motor (async MongoDB), Celery |
+| Database | MongoDB 7 |
+| Cache/Queue | Redis 7 |
+| Storage | MinIO (S3-compatible) |
+| Translation | LibreTranslate (self-hosted) |
+| Auth | NextAuth v5 + Google OAuth |
+| UI | CSS Modules, Konva.js (section annotation) |
+| Monorepo | Turborepo + pnpm |
 
-```sh
-npx create-turbo@latest
+## Project Structure
+
+```
+apps/web        — Next.js frontend (port 3000)
+apps/api        — FastAPI backend (port 8000)
+infra/          — Docker Compose (dev + production), nginx config, Dockerfiles
+packages/ui     — @repo/ui shared React components
+packages/eslint-config — ESLint 9 flat config
+packages/typescript-config — Shared TS configs
 ```
 
-## What's inside?
+## Getting Started
 
-This Turborepo includes the following packages/apps:
+### Prerequisites
 
-### Apps and Packages
+- Node.js 22+, pnpm
+- Python 3.12+
+- Docker + Docker Compose (for backend services)
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+### Environment
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+Copy `.env.example` to `.env` and fill in the values:
 
 ```sh
-cd my-turborepo
-turbo build
+cp .env.example .env
 ```
 
-Without global `turbo`, use your package manager:
+Required: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_SECRET`.
+
+See `.env.example` for all available variables.
+
+### Dev Environment — Infra in Docker, Apps Natively
+
+Start infrastructure only (MongoDB, Redis, MinIO, LibreTranslate):
 
 ```sh
-cd my-turborepo
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+docker compose -f infra/docker-compose.dev.yml up -d
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+Run apps natively with hot-reload:
 
 ```sh
-turbo build --filter=docs
+pnpm install
+pnpm dev          # → http://localhost:3000
 ```
 
-Without global `turbo`:
+For the backend:
 
 ```sh
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+cd apps/api
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+### Production — Everything in Docker
 
 ```sh
-cd my-turborepo
-turbo dev
+docker compose -f infra/docker-compose.yml build
+docker compose -f infra/docker-compose.yml up -d
 ```
 
-Without global `turbo`, use your package manager:
+This starts: nginx (port 80), Next.js, FastAPI, Celery worker, MongoDB, Redis, MinIO, LibreTranslate.
 
-```sh
-cd my-turborepo
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
+## Commands
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start frontend dev server |
+| `pnpm build` | Build all packages & apps |
+| `pnpm lint` | Lint (strict: `--max-warnings 0`) |
+| `pnpm check-types` | TypeScript type checking |
+| `pnpm format` | Prettier formatting |
+| `pnpm --filter=web test` | Run frontend unit tests (33 Vitest tests) |
+| `cd apps/api && python -m pytest tests/ -v` | Run backend tests (41 pytest tests) |
+| `cd apps/api && celery -A app.tasks.celery_app worker --loglevel=info` | Start Celery worker |
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+## Google OAuth Setup
 
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a project → APIs & Services → Credentials
+3. Create an OAuth 2.0 Client ID (Web application)
+4. **Authorized JavaScript origins**: `http://localhost:3000`
+5. **Authorized redirect URIs**: `http://localhost:3000/api/auth/callback/google`
+6. Copy the Client ID and Client Secret to `.env`
