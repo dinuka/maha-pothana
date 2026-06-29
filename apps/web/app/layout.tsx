@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { SessionProvider } from "next-auth/react"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { auth } from "@/lib/auth"
 import Header from "@/components/Header"
 import "./globals.css"
@@ -22,6 +23,7 @@ export default async function RootLayout({
         <SessionProvider session={session}>
           <Header user={session?.user} />
           <main>{children}</main>
+          <SpeedInsights />
         </SessionProvider>
       </body>
     </html>
