@@ -10,6 +10,7 @@
 ## Layout Structure
 
 ### Global Layout
+
 ```
 ┌──────────────────────────────────────────────────┐
 │  Header                                           │
@@ -27,6 +28,7 @@
 - Super Admin sees: Dashboard, Books, Translate, Admin
 
 ### Book Console Layout (Editor)
+
 ```
 ┌──────────────────────────────────────────────────┐
 │  ← Back to Books  Book Title          [Settings]  │
@@ -50,6 +52,7 @@
 ```
 
 ### Translation Page Layout
+
 ```
 ┌───────────────────────────────────────────────────────┐
 │  ← Back to Queue   Translate                          │
@@ -88,6 +91,7 @@
 ### 1. Section Annotation Editor (Konva.js)
 
 **States:**
+
 - **Loading** — Skeleton placeholder while page image loads
 - **Detecting** — Spinner overlay with "Detecting sections..." text
 - **Edit mode** — Colored rectangles overlaid on page image:
@@ -102,6 +106,7 @@
 - **Error state** — "Detection failed. [Retry]" button
 
 **Interactions:**
+
 - Click rectangle → select it (show properties in sidebar)
 - Drag rectangle → move it
 - Drag corner handle → resize
@@ -113,6 +118,7 @@
 - Pan: spacebar + drag to pan around zoomed canvas
 
 **Responses:**
+
 - Rectangle changes color briefly on successful action
 - Snap-to-grid when resizing (optional, toggleable)
 - Undo/Redo support via Ctrl+Z / Ctrl+Shift+Z
@@ -120,6 +126,7 @@
 ### 2. Translation Interface
 
 **States:**
+
 - **Idle** — Waiting for user to click "Next Section"
 - **Loading** — Section image (from cropped S3 key) and auto-translation loading
 - **Ready** — Section loaded, auto-translate shown, editor ready
@@ -130,6 +137,7 @@
 - **Error** — "Failed to load section. [Retry]"
 
 **Interactions:**
+
 - Zoom slider +/— buttons and percentage display
 - Click "Next" → load next random section
 - Click "Prev/Next Page" → show adjacent page thumbnails (showing `originalPageNumber` labels)
@@ -142,6 +150,7 @@
 ### 3. Book Upload
 
 **States:**
+
 - **Empty** — Drag-and-drop zone with dashed border + "Upload PDF" button
 - **Dragging** — Zone highlights green
 - **Uploading** — Progress bar with percentage + filename
@@ -152,6 +161,7 @@
 - **Error** — Network: "Upload failed. [Retry]"
 
 **Form fields:**
+
 - Book Title (required)
 - Author (required)
 - Source Language (dropdown, required)

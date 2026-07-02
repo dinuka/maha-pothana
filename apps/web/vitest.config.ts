@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      "server-only": path.resolve(__dirname, "./__tests__/mocks/server-only.ts"),
       "@": path.resolve(__dirname, "."),
     },
   },
@@ -14,6 +15,12 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./__tests__/setup.ts"],
     include: ["__tests__/**/*.test.{ts,tsx}"],
+    env: {
+      AUTH_SECRET: "test-auth-secret",
+      AUTH_GOOGLE_ID: "test-google-id",
+      AUTH_GOOGLE_SECRET: "test-google-secret",
+      INTERNAL_API_KEY: "test-internal-api-key",
+    },
     server: {
       deps: {
         inline: ["next-auth"],

@@ -7,7 +7,7 @@ async def test_list_pages(client, mock_db, sample_page):
     mock_db.pages.find.return_value.to_list = AsyncMock(return_value=[sample_page])
     mock_db.sections.count_documents = AsyncMock(return_value=3)
 
-    response = await client.get(f'/api/books/{sample_page["bookId"]}/pages')
+    response = await client.get(f'/api/books/{sample_page["book"]["id"]}/pages')
 
     assert response.status_code == 200
     data = response.json()
@@ -21,7 +21,7 @@ async def test_get_page_with_sections(client, mock_db, sample_page, sample_secti
     mock_db.pages.find_one = AsyncMock(return_value=sample_page)
     mock_db.sections.find.return_value.to_list = AsyncMock(return_value=[sample_section])
 
-    response = await client.get(f'/api/books/{sample_page["bookId"]}/pages/1')
+    response = await client.get(f'/api/books/{sample_page["book"]["id"]}/pages/1')
 
     assert response.status_code == 200
     data = response.json()
@@ -35,7 +35,7 @@ async def test_get_page_not_found(client, mock_db, sample_page):
     mock_db.pages.find_one = AsyncMock(return_value=None)
 
     response = await client.get(
-        f'/api/books/{sample_page["bookId"]}/pages/999'
+        f'/api/books/{sample_page["book"]["id"]}/pages/999'
     )
     assert response.status_code == 404
 
@@ -77,5 +77,5 @@ async def test_save_sections(client, mock_db, sample_page):
 
     assert response.status_code == 200
     assert response.json()["status"] == "SECTIONS_CONFIRMED"
-    mock_db.sections.delete_many.assert_awaited_once_with({"pageId": sample_page["_id"]})
+    mock_db.sections.delete_many.assert_awaited_once_with({"page.id": sample_page["_id"]})
     mock_crop.delay.assert_called_once_with(sample_page["_id"])

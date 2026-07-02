@@ -1,3 +1,6 @@
+import io
+from datetime import timedelta
+
 from minio import Minio
 from app.config import settings
 
@@ -23,7 +26,7 @@ async def upload_file(key: str, data: bytes, content_type: str = "application/oc
     s3.put_object(
         settings.minio_bucket,
         key,
-        data,
+        io.BytesIO(data),
         length=len(data),
         content_type=content_type,
     )
@@ -32,7 +35,7 @@ async def upload_file(key: str, data: bytes, content_type: str = "application/oc
 
 async def get_presigned_url(key: str, expires: int = 3600) -> str:
     s3 = get_s3()
-    return s3.presigned_get_object(settings.minio_bucket, key, expires=expires)
+    return s3.presigned_get_object(settings.minio_bucket, key, expires=timedelta(seconds=expires))
 
 
 async def delete_file(key: str) -> None:

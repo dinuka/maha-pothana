@@ -1,12 +1,18 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
 import jwt
 
 from app.config import settings
 from app.db.client import connect_db, close_db, get_db
 from app.db.indexes import ensure_indexes
 from app.api import auth, books, pages, sections, users
+
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 
 @asynccontextmanager
@@ -36,16 +42,20 @@ async def auth_middleware(request: Request, call_next):
     if request.url.path.startswith("/api/auth"):
         return await call_next(request)
 
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-        try:
-            payload = jwt.decode(token, settings.auth_secret, algorithms=["HS256"])
-            request.state.user_id = payload.get("sub")
-        except jwt.PyJWTError:
-            request.state.user_id = None
+    internal_key = request.headers.get("X-Internal-Api-Key", "")
+    if internal_key and internal_key == settings.internal_api_key:
+        request.state.user_id = request.headers.get("X-User-Id")
     else:
-        request.state.user_id = None
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            try:
+                payload = jwt.decode(token, settings.auth_secret, algorithms=["HS256"])
+                request.state.user_id = payload.get("sub")
+            except jwt.PyJWTError:
+                request.state.user_id = None
+        else:
+            request.state.user_id = None
 
     return await call_next(request)
 

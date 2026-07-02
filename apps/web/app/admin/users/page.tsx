@@ -1,3 +1,5 @@
+import { apiFetch } from "@/lib/apiClient"
+
 interface User {
   id: string
   name: string
@@ -7,9 +9,7 @@ interface User {
 
 async function getUsers(): Promise<User[]> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users`, {
-      cache: "no-store",
-    })
+    const res = await apiFetch("/api/users", { cache: "no-store" })
     if (res.ok) return res.json()
   } catch {
     /* noop */
@@ -38,7 +38,9 @@ export default async function AdminUsersPage() {
             <span style={{ ...styles.col, flex: 2, color: "var(--muted)" }}>{user.email}</span>
             <span style={{ ...styles.col, flex: 1 }}>
               {user.roles.map((role) => (
-                <span key={role} style={styles.roleBadge(role)}>{role}</span>
+                <span key={role} style={styles.roleBadge(role)}>
+                  {role}
+                </span>
               ))}
             </span>
             <span style={{ ...styles.col, flex: 1 }}>

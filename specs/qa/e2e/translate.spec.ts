@@ -78,7 +78,9 @@ test.describe("Translation Flow", () => {
     await expect(page.locator("text=Dhammapada")).toBeVisible()
   })
 
-  test("TRANS-12: Previous submission panel shown when pending translation exists", async ({ page }) => {
+  test("TRANS-12: Previous submission panel shown when pending translation exists", async ({
+    page,
+  }) => {
     await page.route("**/api/sections/*/my-translation", (route) => {
       route.fulfill({
         status: 200,

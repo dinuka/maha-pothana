@@ -54,14 +54,14 @@ async def invite_translator(
     if not target:
         raise HTTPException(404, "User not found")
 
-    existing = await db.invitations.find_one({"bookId": book_id, "userId": str(target["_id"])})
+    existing = await db.invitations.find_one({"book.id": book_id, "user.id": str(target["_id"])})
     if existing:
         raise HTTPException(409, "User already invited")
 
     await db.invitations.insert_one({
-        "bookId": book_id,
-        "userId": str(target["_id"]),
-        "invitedBy": user_id,
+        "book": {"id": book_id},
+        "user": {"id": str(target["_id"])},
+        "invitedBy": {"id": user_id},
         "status": "PENDING",
         "createdAt": datetime.now(timezone.utc),
         "updatedAt": datetime.now(timezone.utc),
@@ -73,7 +73,7 @@ async def invite_translator(
 @router.post("/api/books/{book_id}/translators/{translator_id}/block")
 async def block_translator(book_id: str, translator_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     result = await db.invitations.update_one(
-        {"bookId": book_id, "userId": translator_id},
+        {"book.id": book_id, "user.id": translator_id},
         {"$set": {"status": "BLOCKED", "updatedAt": datetime.now(timezone.utc)}},
     )
     if result.matched_count == 0:

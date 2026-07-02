@@ -3,10 +3,12 @@ from __future__ import annotations
 from pydantic import BaseModel
 from datetime import datetime
 
+from app.schemas.refs import PageRef, BookRef
+
 
 class SectionResponse(BaseModel):
     id: str
-    pageId: str
+    page: PageRef
     sectionOrder: int
     type: str = "PARAGRAPH"
     x: float = 0
@@ -39,5 +41,5 @@ class NextSectionResponse(BaseModel):
     autoTranslatedText: str | None = None
     pageNumber: int
     bookTitle: str
-    bookId: str
+    book: BookRef
     croppedImageUrl: str | None = None

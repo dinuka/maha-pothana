@@ -203,13 +203,13 @@ POST   /api/books/{id}/block     # Block translator
 
 ```yaml
 services:
-  nginx:        # Reverse proxy (port 80)
-  nextjs:       # Frontend (port 3000)
-  fastapi:      # Backend API (port 8000)
-  celery:       # Async task worker
-  mongodb:      # Database (port 27017)
-  redis:        # Cache + Celery broker (port 6379)
-  minio:        # S3-compatible storage (ports 9000, 9001)
+  nginx: # Reverse proxy (port 80)
+  nextjs: # Frontend (port 3000)
+  fastapi: # Backend API (port 8000)
+  celery: # Async task worker
+  mongodb: # Database (port 27017)
+  redis: # Cache + Celery broker (port 6379)
+  minio: # S3-compatible storage (ports 9000, 9001)
   libretranslate: # Free translation API (port 5000)
 ```
 

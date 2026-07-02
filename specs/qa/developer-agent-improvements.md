@@ -1,7 +1,9 @@
 # Developer Agent — Configuration Improvements
 
 ## Current Problem
+
 The developer agent only generates code within existing workspace boundaries. When asked to implement a full-stack application, it defaults to only the frontend because:
+
 1. No backend workspace exists to extend
 2. AGENTS.md only describes frontend structure
 3. Task prompts lack a comprehensive deliverable checklist
@@ -17,11 +19,13 @@ Add a "Full Stack Layout" section to AGENTS.md:
 ## Full Stack Layout
 
 ```
-apps/web       — Next.js App Router (port 3000)
-apps/api       — FastAPI Python backend (port 8000)
-docker/        — Docker Compose + service configs
-  docker-compose.yml  — mongodb, redis, minio, libretranslate, nginx, api, celery
-  nginx/              — Reverse proxy config (port 80)
+
+apps/web — Next.js App Router (port 3000)
+apps/api — FastAPI Python backend (port 8000)
+docker/ — Docker Compose + service configs
+docker-compose.yml — mongodb, redis, minio, libretranslate, nginx, api, celery
+nginx/ — Reverse proxy config (port 80)
+
 ```
 
 ## Backend conventions (apps/api)

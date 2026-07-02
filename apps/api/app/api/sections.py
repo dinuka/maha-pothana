@@ -6,6 +6,7 @@ import random
 from app.db.client import get_db
 from app.schemas.section import NextSectionResponse
 from app.schemas.translation import TranslationSubmit, TranslationResponse, MyTranslationResponse
+from app.schemas.refs import BookRef, SectionRef, TranslatorRef, ApprovedByRef
 from app.services.s3 import get_presigned_url
 from app.services.translate import auto_translate
 from app.api.deps import get_current_user
@@ -25,7 +26,7 @@ async def get_next_section(
                 "from": "translations",
                 "let": {"section_id": "$_id"},
                 "pipeline": [
-                    {"$match": {"$expr": {"$eq": ["$sectionId", {"$toString": "$$section_id"}]}}},
+                    {"$match": {"$expr": {"$eq": ["$section.id", {"$toString": "$$section_id"}]}}},
                 ],
                 "as": "translations",
             }
@@ -44,8 +45,10 @@ async def get_next_section(
         {
             "$lookup": {
                 "from": "pages",
-                "localField": "pageId",
-                "foreignField": "_id",
+                "let": {"page_id": "$page.id"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": ["$_id", {"$toObjectId": "$$page_id"}]}}},
+                ],
                 "as": "page",
             }
         },
@@ -53,8 +56,10 @@ async def get_next_section(
         {
             "$lookup": {
                 "from": "books",
-                "localField": "page.bookId",
-                "foreignField": "_id",
+                "let": {"book_id": "$page.book.id"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": ["$_id", {"$toObjectId": "$$book_id"}]}}},
+                ],
                 "as": "book",
             }
         },
@@ -83,7 +88,7 @@ async def get_next_section(
         autoTranslatedText=sec.get("autoTranslatedText"),
         pageNumber=page.get("pageNumber", 0),
         bookTitle=book.get("title", ""),
-        bookId=str(book["_id"]),
+        book=BookRef(id=str(book["_id"])),
         croppedImageUrl=cropped_url,
     )
 
@@ -100,7 +105,7 @@ async def get_section(section_id: str, db: AsyncIOMotorDatabase = Depends(get_db
 
     return {
         "id": str(sec["_id"]),
-        "pageId": sec["pageId"],
+        "page": {"id": sec["page"]["id"]},
         "sectionOrder": sec["sectionOrder"],
         "type": sec.get("type", "PARAGRAPH"),
         "x": sec.get("x", 0),
@@ -124,8 +129,8 @@ async def submit_translation(
         raise HTTPException(404, "Section not found")
 
     existing = await db.translations.find_one({
-        "sectionId": section_id,
-        "translatorId": user_id,
+        "section.id": section_id,
+        "translator.id": user_id,
     })
 
     if existing:
@@ -141,8 +146,8 @@ async def submit_translation(
         )
     else:
         await db.translations.insert_one({
-            "sectionId": section_id,
-            "translatorId": user_id,
+            "section": {"id": section_id},
+            "translator": {"id": user_id},
             "translatedText": body.translatedText,
             "exactLetterTranslation": body.exactLetterTranslation,
             "isApproved": False,
@@ -161,8 +166,8 @@ async def get_my_translation(
     user_id: str = Depends(get_current_user),
 ):
     trans = await db.translations.find_one({
-        "sectionId": section_id,
-        "translatorId": user_id,
+        "section.id": section_id,
+        "translator.id": user_id,
     })
     if not trans:
         raise HTTPException(404, "No translation found")
@@ -176,22 +181,22 @@ async def get_my_translation(
 
 @router.get("/api/sections/{section_id}/translations")
 async def get_section_translations(section_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    cursor = db.translations.find({"sectionId": section_id}).sort("createdAt", 1)
+    cursor = db.translations.find({"section.id": section_id}).sort("createdAt", 1)
     translations = await cursor.to_list(length=100)
 
     result = []
     for t in translations:
-        user = await db.users.find_one({"_id": ObjectId(t["translatorId"])})
+        user = await db.users.find_one({"_id": ObjectId(t["translator"]["id"])})
         result.append(
             TranslationResponse(
                 id=str(t["_id"]),
-                sectionId=t["sectionId"],
-                translatorId=t["translatorId"],
+                section=SectionRef(id=t["section"]["id"]),
+                translator=TranslatorRef(id=t["translator"]["id"]),
                 translatorName=user.get("name") if user else None,
                 translatedText=t["translatedText"],
                 exactLetterTranslation=t.get("exactLetterTranslation"),
                 isApproved=t.get("isApproved", False),
-                approvedBy=t.get("approvedBy"),
+                approvedBy=ApprovedByRef(id=t["approvedBy"]["id"]) if t.get("approvedBy") else None,
                 createdAt=t.get("createdAt"),
             )
         )
@@ -206,7 +211,7 @@ async def approve_translation(
 ):
     result = await db.translations.update_one(
         {"_id": ObjectId(translation_id)},
-        {"$set": {"isApproved": True, "approvedBy": user_id, "updatedAt": datetime.now(timezone.utc)}},
+        {"$set": {"isApproved": True, "approvedBy": {"id": user_id}, "updatedAt": datetime.now(timezone.utc)}},
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Translation not found")

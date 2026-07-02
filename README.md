@@ -4,17 +4,17 @@ A collaborative book translation platform. Translators work on sections of digit
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 16 (App Router), TypeScript 6 |
-| Backend | FastAPI, Python 3.12+, Motor (async MongoDB), Celery |
-| Database | MongoDB 7 |
-| Cache/Queue | Redis 7 |
-| Storage | MinIO (S3-compatible) |
-| Translation | LibreTranslate (self-hosted) |
-| Auth | NextAuth v5 + Google OAuth |
-| UI | CSS Modules, Konva.js (section annotation) |
-| Monorepo | Turborepo + pnpm |
+| Layer       | Technology                                           |
+| ----------- | ---------------------------------------------------- |
+| Frontend    | Next.js 16 (App Router), TypeScript 6                |
+| Backend     | FastAPI, Python 3.12+, Motor (async MongoDB), Celery |
+| Database    | MongoDB 7                                            |
+| Cache/Queue | Redis 7                                              |
+| Storage     | MinIO (S3-compatible)                                |
+| Translation | LibreTranslate (self-hosted)                         |
+| Auth        | NextAuth v5 + Google OAuth                           |
+| UI          | CSS Modules, Konva.js (section annotation)           |
+| Monorepo    | Turborepo + pnpm                                     |
 
 ## Project Structure
 
@@ -82,16 +82,16 @@ This starts: nginx (port 80), Next.js, FastAPI, Celery worker, MongoDB, Redis, M
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start frontend dev server |
-| `pnpm build` | Build all packages & apps |
-| `pnpm lint` | Lint (strict: `--max-warnings 0`) |
-| `pnpm check-types` | TypeScript type checking |
-| `pnpm format` | Prettier formatting |
-| `pnpm --filter=web test` | Run frontend unit tests (33 Vitest tests) |
-| `cd apps/api && python -m pytest tests/ -v` | Run backend tests (41 pytest tests) |
-| `cd apps/api && celery -A app.tasks.celery_app worker --loglevel=info` | Start Celery worker |
+| Command                                                                | Description                               |
+| ---------------------------------------------------------------------- | ----------------------------------------- |
+| `pnpm dev`                                                             | Start frontend dev server                 |
+| `pnpm build`                                                           | Build all packages & apps                 |
+| `pnpm lint`                                                            | Lint (strict: `--max-warnings 0`)         |
+| `pnpm check-types`                                                     | TypeScript type checking                  |
+| `pnpm format`                                                          | Prettier formatting                       |
+| `pnpm --filter=web test`                                               | Run frontend unit tests (33 Vitest tests) |
+| `cd apps/api && python -m pytest tests/ -v`                            | Run backend tests (41 pytest tests)       |
+| `cd apps/api && celery -A app.tasks.celery_app worker --loglevel=info` | Start Celery worker                       |
 
 ## Google OAuth Setup
 

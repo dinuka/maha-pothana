@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 from datetime import datetime
 
+from app.schemas.refs import OwnerRef
+
 
 class BookCreate(BaseModel):
     title: str
@@ -20,7 +22,7 @@ class BookResponse(BaseModel):
     fileKey: str | None = None
     thumbnailKey: str | None = None
     translatorCount: int = 1
-    ownerId: str
+    owner: OwnerRef
     status: str = "UPLOADING"
     createdAt: datetime | None = None
     updatedAt: datetime | None = None

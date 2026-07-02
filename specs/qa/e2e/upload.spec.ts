@@ -21,7 +21,10 @@ test.describe("Book Upload", () => {
 
   test("UPLOAD-02: Duplicate book shows error", async ({ page }) => {
     await page.route("**/api/books", (route) => {
-      route.fulfill({ status: 409, body: JSON.stringify({ message: "This book has already been uploaded" }) })
+      route.fulfill({
+        status: 409,
+        body: JSON.stringify({ message: "This book has already been uploaded" }),
+      })
     })
     await page.goto("/books/new")
     await page.fill("input[placeholder='Enter book title']", "Duplicate")
@@ -65,7 +68,9 @@ test.describe("Book Upload", () => {
     await page.click("text=English")
     await page.click("text=Tamil")
     await page.click("text=Sanskrit")
-    const selectedChips = page.locator("button", { has: page.locator('[style*="background: var(--primary)"]') })
+    const selectedChips = page.locator("button", {
+      has: page.locator('[style*="background: var(--primary)"]'),
+    })
     await expect(selectedChips).toHaveCount(3)
   })
 })

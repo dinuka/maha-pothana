@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { publicEnv } from "@/lib/env/publicEnv"
 
 interface Section {
   id: string
@@ -9,7 +10,7 @@ interface Section {
   autoTranslatedText: string
   pageNumber: number
   bookTitle: string
-  bookId: string
+  book: { id: string }
 }
 
 interface MyTranslation {
@@ -33,7 +34,7 @@ export default function TranslatePage() {
     setMyTranslation(null)
     setExactLetter("")
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sections/next`)
+      const res = await fetch(`${publicEnv.apiUrl}/api/sections/next`)
       if (res.status === 404) {
         setMessage("All sections translated!")
         setSection(null)
@@ -53,7 +54,7 @@ export default function TranslatePage() {
 
   const fetchMyTranslation = async (sectionId: string) => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sections/${sectionId}/my-translation`)
+      const res = await fetch(`${publicEnv.apiUrl}/api/sections/${sectionId}/my-translation`)
       if (res.ok) {
         const data = (await res.json()) as MyTranslation
         setMyTranslation(data)
@@ -69,7 +70,7 @@ export default function TranslatePage() {
     if (!section || !translatedText.trim()) return
     setSaving(true)
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sections/${section.id}/translate`, {
+      const res = await fetch(`${publicEnv.apiUrl}/api/sections/${section.id}/translate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -96,9 +97,7 @@ export default function TranslatePage() {
     <div style={styles.page}>
       <h1 style={styles.title}>Translate</h1>
 
-      {!section && !loading && message && (
-        <div style={styles.messageBox}>{message}</div>
-      )}
+      {!section && !loading && message && <div style={styles.messageBox}>{message}</div>}
 
       {!section && !loading && !message && (
         <div style={styles.empty}>
@@ -119,7 +118,9 @@ export default function TranslatePage() {
               <span style={styles.pageIndicator}> — Page {section.pageNumber}</span>
             </div>
             <div style={styles.editorActions}>
-              <button onClick={fetchNextSection} style={styles.skipBtn}>Skip</button>
+              <button onClick={fetchNextSection} style={styles.skipBtn}>
+                Skip
+              </button>
               <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
                 {saving ? "Saving..." : "Save Translation"}
               </button>

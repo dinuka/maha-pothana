@@ -22,15 +22,15 @@ test.describe("Authentication & Authorization", () => {
   test("AUTH-05: Editor nav includes Books link", async ({ page }) => {
     // Set role = EDITOR
     await page.goto("/dashboard")
-    await expect(page.locator('nav >> text=Books')).toBeVisible()
-    await expect(page.locator('nav >> text=Translate')).not.toBeVisible()
+    await expect(page.locator("nav >> text=Books")).toBeVisible()
+    await expect(page.locator("nav >> text=Translate")).not.toBeVisible()
   })
 
   test("AUTH-05: Translator nav includes Translate link", async ({ page }) => {
     // Set role = TRANSLATOR
     await page.goto("/dashboard")
-    await expect(page.locator('nav >> text=Translate')).toBeVisible()
-    await expect(page.locator('nav >> text=Books')).not.toBeVisible()
+    await expect(page.locator("nav >> text=Translate")).toBeVisible()
+    await expect(page.locator("nav >> text=Books")).not.toBeVisible()
   })
 
   test("AUTH-06: Unauthenticated access redirects to login", async ({ page }) => {

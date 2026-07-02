@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth"
+import { apiFetch } from "@/lib/apiClient"
 import Link from "next/link"
 
 interface Book {
@@ -12,9 +12,7 @@ interface Book {
 
 async function getBooks(): Promise<Book[]> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/books`, {
-      cache: "no-store",
-    })
+    const res = await apiFetch("/api/books", { cache: "no-store" })
     if (res.ok) return (await res.json()) as Book[]
   } catch {
     /* noop */
@@ -23,20 +21,23 @@ async function getBooks(): Promise<Book[]> {
 }
 
 export default async function BooksPage() {
-  await auth()
   const books = await getBooks()
 
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <h1 style={styles.title}>My Books</h1>
-        <Link href="/books/new" style={styles.uploadButton}>Upload New Book</Link>
+        <Link href="/books/new" style={styles.uploadButton}>
+          Upload New Book
+        </Link>
       </div>
 
       {books.length === 0 ? (
         <div style={styles.empty}>
           <p>No books yet.</p>
-          <Link href="/books/new" style={styles.link}>Upload your first book</Link>
+          <Link href="/books/new" style={styles.link}>
+            Upload your first book
+          </Link>
         </div>
       ) : (
         <div style={styles.grid}>
@@ -65,7 +66,12 @@ export default async function BooksPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   page: { padding: 48, maxWidth: 960, margin: "0 auto" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 32,
+  },
   title: { fontSize: 28, fontWeight: 700 },
   uploadButton: {
     padding: "10px 20px",
@@ -76,7 +82,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
   },
   empty: { textAlign: "center", padding: 64, color: "var(--muted)" },
-  link: { color: "var(--primary)", textDecoration: "underline", marginTop: 8, display: "inline-block" },
+  link: {
+    color: "var(--primary)",
+    textDecoration: "underline",
+    marginTop: 8,
+    display: "inline-block",
+  },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 },
   card: {
     border: "1px solid var(--border)",
