@@ -10,6 +10,7 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.books.create_index([("title", "text"), ("author", "text")])
 
     await db.pages.create_index([("book.id", 1), ("pageNumber", 1)])
+    await db.pages.create_index([("book.id", 1), ("status", 1), ("pageNumber", 1)])
 
     await db.sections.create_index([("page.id", 1), ("sectionOrder", 1)])
 

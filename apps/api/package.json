@@ -2,7 +2,8 @@
   "name": "api",
   "private": true,
   "scripts": {
-    "dev": "concurrently --names api,celery --prefix-colors blue,green \".venv/bin/uvicorn app.main:app --reload --port 8000\" \".venv/bin/celery -A app.tasks.celery_app worker --loglevel=info\""
+    "dev": "concurrently --names api,celery --prefix-colors blue,green \".venv/bin/uvicorn app.main:app --reload --port 8000\" \".venv/bin/celery -A app.tasks.celery_app worker --loglevel=info\"",
+    "test": ".venv/bin/python -m pytest tests/ -v"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"

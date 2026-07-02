@@ -24,3 +24,10 @@ class PageListItem(BaseModel):
     sectionCount: int = 0
     translatedPercent: float = 0
     thumbnailUrl: str | None = None
+
+
+class PageListResponse(BaseModel):
+    items: list[PageListItem]
+    total: int
+    skip: int
+    limit: int

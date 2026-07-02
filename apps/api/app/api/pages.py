@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 
 from app.db.client import get_db
-from app.schemas.page import PageResponse, PageListItem
+from app.schemas.page import PageResponse, PageListItem, PageListResponse
 from app.schemas.refs import BookRef
 from app.services.s3 import get_presigned_url
 from app.tasks.detect_sections import detect_sections
@@ -14,15 +14,31 @@ router = APIRouter()
 
 
 @router.get("/api/books/{book_id}/pages")
-async def list_pages(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    cursor = db.pages.find({"book.id": book_id}).sort("pageNumber", 1)
-    pages = await cursor.to_list(length=10000)
-    result = []
+async def list_pages(
+    book_id: str,
+    status: str | None = Query(None),
+    sort: str = Query("PAGE_NUMBER"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(35, ge=1, le=200),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> PageListResponse:
+    mongo_filter: dict = {"book.id": book_id}
+    if status and status != "ALL":
+        mongo_filter["status"] = status
+
+    total = await db.pages.count_documents(mongo_filter)
+
+    # "PROGRESS" has no dedicated Mongo sort key yet: translatedPercent is never
+    # computed server-side, so both sort options resolve to pageNumber for now.
+    cursor = db.pages.find(mongo_filter).sort("pageNumber", 1).skip(skip).limit(limit)
+    pages = await cursor.to_list(length=limit)
+
+    items = []
     for page in pages:
         section_count = await db.sections.count_documents({"page.id": str(page["_id"])})
         thumbnail_key = page.get("thumbnailKey")
         thumbnail_url = await get_presigned_url(thumbnail_key) if thumbnail_key else None
-        result.append(
+        items.append(
             PageListItem(
                 id=str(page["_id"]),
                 pageNumber=page["pageNumber"],
@@ -32,7 +48,7 @@ async def list_pages(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
                 thumbnailUrl=thumbnail_url,
             )
         )
-    return result
+    return PageListResponse(items=items, total=total, skip=skip, limit=limit)
 
 
 @router.get("/api/books/{book_id}/pages/{page_num}")
