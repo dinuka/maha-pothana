@@ -93,7 +93,7 @@ def sample_book():
         "fileHash": "abc123",
         "thumbnailKey": None,
         "translatorCount": 1,
-        "ownerId": "507f1f77bcf86cd799439011",
+        "owner": {"id": "507f1f77bcf86cd799439011"},
         "status": "UPLOADING",
         "createdAt": datetime.now(timezone.utc),
         "updatedAt": datetime.now(timezone.utc),
@@ -104,7 +104,7 @@ def sample_book():
 def sample_page():
     return {
         "_id": "507f1f77bcf86cd799439013",
-        "bookId": "507f1f77bcf86cd799439012",
+        "book": {"id": "507f1f77bcf86cd799439012"},
         "pageNumber": 1,
         "originalPageNumber": "1",
         "imageKey": "books/user123/pages/1.png",
@@ -119,7 +119,7 @@ def sample_page():
 def sample_section():
     return {
         "_id": "507f1f77bcf86cd799439014",
-        "pageId": "507f1f77bcf86cd799439013",
+        "page": {"id": "507f1f77bcf86cd799439013"},
         "sectionOrder": 1,
         "type": "PARAGRAPH",
         "x": 10,
@@ -135,8 +135,8 @@ def sample_section():
 def sample_translation():
     return {
         "_id": "507f1f77bcf86cd799439015",
-        "sectionId": "507f1f77bcf86cd799439014",
-        "translatorId": "507f1f77bcf86cd799439011",
+        "section": {"id": "507f1f77bcf86cd799439014"},
+        "translator": {"id": "507f1f77bcf86cd799439011"},
         "translatedText": "Translated text",
         "exactLetterTranslation": "Exact letter translation",
         "isApproved": False,

@@ -24,10 +24,24 @@ export default function Header({ user }: HeaderProps) {
           Maha Pothana
         </Link>
         <nav style={styles.nav}>
-          <Link href="/dashboard" style={styles.link}>Dashboard</Link>
-          {isEditor && <Link href="/books" style={styles.link}>Books</Link>}
-          {isTranslator && <Link href="/translate" style={styles.link}>Translate</Link>}
-          {isSuperAdmin && <Link href="/admin/users" style={styles.link}>Admin</Link>}
+          <Link href="/dashboard" style={styles.link}>
+            Dashboard
+          </Link>
+          {isEditor && (
+            <Link href="/books" style={styles.link}>
+              Books
+            </Link>
+          )}
+          {isTranslator && (
+            <Link href="/translate" style={styles.link}>
+              Translate
+            </Link>
+          )}
+          {isSuperAdmin && (
+            <Link href="/admin/users" style={styles.link}>
+              Admin
+            </Link>
+          )}
         </nav>
       </div>
       <div style={styles.right}>
@@ -38,7 +52,9 @@ export default function Header({ user }: HeaderProps) {
           )}
           {user.name}
         </span>
-        <button onClick={() => signOut()} style={styles.signOut}>Sign out</button>
+        <button onClick={() => signOut()} style={styles.signOut}>
+          Sign out
+        </button>
       </div>
     </header>
   )

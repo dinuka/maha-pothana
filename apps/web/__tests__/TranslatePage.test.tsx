@@ -28,15 +28,16 @@ describe("TranslatePage", () => {
       .mockResolvedValueOnce({
         status: 200,
         ok: true,
-        json: () => Promise.resolve({
-          id: "sec-1",
-          type: "PARAGRAPH",
-          originalText: "Original text",
-          autoTranslatedText: "Auto translated",
-          pageNumber: 5,
-          bookTitle: "Test Book",
-          bookId: "book-1",
-        }),
+        json: () =>
+          Promise.resolve({
+            id: "sec-1",
+            type: "PARAGRAPH",
+            originalText: "Original text",
+            autoTranslatedText: "Auto translated",
+            pageNumber: 5,
+            bookTitle: "Test Book",
+            book: { id: "book-1" },
+          }),
       })
       .mockResolvedValueOnce({
         ok: false,
@@ -71,15 +72,16 @@ describe("TranslatePage", () => {
       .mockResolvedValueOnce({
         status: 200,
         ok: true,
-        json: () => Promise.resolve({
-          id: "sec-2",
-          type: "PARAGRAPH",
-          originalText: "Orig",
-          autoTranslatedText: "Machine translation",
-          pageNumber: 1,
-          bookTitle: "Bhagavad Gita",
-          bookId: "book-2",
-        }),
+        json: () =>
+          Promise.resolve({
+            id: "sec-2",
+            type: "PARAGRAPH",
+            originalText: "Orig",
+            autoTranslatedText: "Machine translation",
+            pageNumber: 1,
+            bookTitle: "Bhagavad Gita",
+            book: { id: "book-2" },
+          }),
       })
       .mockResolvedValueOnce({
         ok: false,
@@ -100,15 +102,16 @@ describe("TranslatePage", () => {
       .mockResolvedValueOnce({
         status: 200,
         ok: true,
-        json: () => Promise.resolve({
-          id: "sec-3",
-          type: "PARAGRAPH",
-          originalText: "Orig",
-          autoTranslatedText: "Auto",
-          pageNumber: 1,
-          bookTitle: "Book",
-          bookId: "b1",
-        }),
+        json: () =>
+          Promise.resolve({
+            id: "sec-3",
+            type: "PARAGRAPH",
+            originalText: "Orig",
+            autoTranslatedText: "Auto",
+            pageNumber: 1,
+            bookTitle: "Book",
+            book: { id: "b1" },
+          }),
       })
       .mockResolvedValueOnce({
         ok: false,
@@ -129,15 +132,16 @@ describe("TranslatePage", () => {
       .mockResolvedValueOnce({
         status: 200,
         ok: true,
-        json: () => Promise.resolve({
-          id: "sec-4",
-          type: "PARAGRAPH",
-          originalText: "Orig",
-          autoTranslatedText: "Auto",
-          pageNumber: 1,
-          bookTitle: "Book",
-          bookId: "b1",
-        }),
+        json: () =>
+          Promise.resolve({
+            id: "sec-4",
+            type: "PARAGRAPH",
+            originalText: "Orig",
+            autoTranslatedText: "Auto",
+            pageNumber: 1,
+            bookTitle: "Book",
+            book: { id: "b1" },
+          }),
       })
       .mockResolvedValueOnce({
         ok: false,
@@ -179,24 +183,26 @@ describe("TranslatePage", () => {
       .mockResolvedValueOnce({
         status: 200,
         ok: true,
-        json: () => Promise.resolve({
-          id: "sec-5",
-          type: "PARAGRAPH",
-          originalText: "Orig",
-          autoTranslatedText: "Auto",
-          pageNumber: 1,
-          bookTitle: "Book",
-          bookId: "b1",
-        }),
+        json: () =>
+          Promise.resolve({
+            id: "sec-5",
+            type: "PARAGRAPH",
+            originalText: "Orig",
+            autoTranslatedText: "Auto",
+            pageNumber: 1,
+            bookTitle: "Book",
+            book: { id: "b1" },
+          }),
       })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({
-          translatedText: "Previous translation",
-          exactLetterTranslation: "Exact letter",
-          isApproved: false,
-        }),
+        json: () =>
+          Promise.resolve({
+            translatedText: "Previous translation",
+            exactLetterTranslation: "Exact letter",
+            isApproved: false,
+          }),
       })
 
     render(React.createElement(TranslatePage))

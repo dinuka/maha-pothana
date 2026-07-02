@@ -3,11 +3,14 @@ import { render, screen, fireEvent } from "@testing-library/react"
 import React from "react"
 
 vi.mock("react-konva", () => ({
-  Stage: ({ children }: { children: React.ReactNode }) => React.createElement("div", { "data-testid": "stage" }, children),
-  Layer: ({ children }: { children: React.ReactNode }) => React.createElement("div", { "data-testid": "layer" }, children),
+  Stage: ({ children }: { children: React.ReactNode }) =>
+    React.createElement("div", { "data-testid": "stage" }, children),
+  Layer: ({ children }: { children: React.ReactNode }) =>
+    React.createElement("div", { "data-testid": "layer" }, children),
   Rect: ({ id, onClick }: { id: string; onClick?: () => void }) =>
     React.createElement("div", { "data-testid": "rect", "data-id": id, onClick }),
-  Text: ({ text }: { text: string }) => React.createElement("span", { "data-testid": "label" }, text),
+  Text: ({ text }: { text: string }) =>
+    React.createElement("span", { "data-testid": "label" }, text),
   Transformer: () => React.createElement("div", { "data-testid": "transformer" }),
 }))
 
@@ -39,14 +42,18 @@ describe("PageEditor", () => {
   })
 
   it("renders initial sections", () => {
-    render(React.createElement(PageEditor, { pageImageUrl: "/test.png", initialSections: mockSections }))
+    render(
+      React.createElement(PageEditor, { pageImageUrl: "/test.png", initialSections: mockSections }),
+    )
     const rects = screen.getAllByTestId("rect")
     // 1 background rect + 2 section rects
     expect(rects).toHaveLength(3)
   })
 
   it("deletes selected section", () => {
-    render(React.createElement(PageEditor, { pageImageUrl: "/test.png", initialSections: mockSections }))
+    render(
+      React.createElement(PageEditor, { pageImageUrl: "/test.png", initialSections: mockSections }),
+    )
     const deleteBtn = screen.getByText("Delete")
     expect(deleteBtn).toBeDisabled()
     const allRects = screen.getAllByTestId("rect")

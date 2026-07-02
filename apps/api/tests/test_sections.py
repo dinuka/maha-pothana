@@ -90,7 +90,7 @@ async def test_get_my_translation(client, mock_db, sample_translation):
     mock_db.translations.find_one = AsyncMock(return_value=sample_translation)
 
     response = await client.get(
-        f'/api/sections/{sample_translation["sectionId"]}/my-translation',
+        f'/api/sections/{sample_translation["section"]["id"]}/my-translation',
         headers={"Authorization": "Bearer test-token"},
     )
 

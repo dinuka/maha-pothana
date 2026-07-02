@@ -2,12 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime, timezone
 import hashlib
+import logging
 
 from app.db.client import get_db
-from app.schemas.book import BookCreate, BookResponse, BookUpdate, BookListItem
+from app.schemas.book import BookResponse, BookUpdate, BookListItem
+from app.schemas.refs import OwnerRef
 from app.services.s3 import upload_file
 from app.tasks.split_pages import split_pages
 from app.api.deps import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -17,11 +21,11 @@ async def list_books(
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    cursor = db.books.find({"ownerId": user_id}).sort("createdAt", -1)
+    cursor = db.books.find({"owner.id": user_id}).sort("createdAt", -1)
     books = await cursor.to_list(length=100)
     result = []
     for book in books:
-        page_count = await db.pages.count_documents({"bookId": str(book["_id"])})
+        page_count = await db.pages.count_documents({"book.id": str(book["_id"])})
         result.append(
             BookListItem(
                 id=str(book["_id"]),
@@ -55,26 +59,30 @@ async def create_book(
     if existing:
         raise HTTPException(409, "This book has already been uploaded")
 
-    file_key = f"books/{user_id}/{file_hash}.pdf"
-    upload_file(file_key, file_data, file.content_type or "application/pdf")
-
     book_doc = {
         "title": title,
         "author": author,
         "sourceLanguage": sourceLanguage,
         "translateLanguages": translateLanguages,
         "description": description,
-        "fileKey": file_key,
+        "fileKey": None,
         "fileHash": file_hash,
         "thumbnailKey": None,
         "translatorCount": 1,
-        "ownerId": user_id,
+        "owner": {"id": user_id},
         "status": "UPLOADING",
         "createdAt": datetime.now(timezone.utc),
         "updatedAt": datetime.now(timezone.utc),
     }
     result = await db.books.insert_one(book_doc)
     book_id = str(result.inserted_id)
+
+    file_key = f"books/{book_id}/original.pdf"
+    await upload_file(file_key, file_data, file.content_type or "application/pdf")
+    await db.books.update_one({"_id": result.inserted_id}, {"$set": {"fileKey": file_key}})
+    book_doc["fileKey"] = file_key
+
+    logger.info("create_book book_id=%s fileKey=%s queued split_pages", book_id, file_key)
 
     split_pages.delay(book_id)
 
@@ -86,7 +94,7 @@ async def create_book(
         translateLanguages=translateLanguages,
         description=description,
         fileKey=file_key,
-        ownerId=user_id,
+        owner=OwnerRef(id=user_id),
         status="UPLOADING",
         createdAt=book_doc["createdAt"],
     )
@@ -108,7 +116,7 @@ async def get_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
         fileKey=book.get("fileKey"),
         thumbnailKey=book.get("thumbnailKey"),
         translatorCount=book.get("translatorCount", 1),
-        ownerId=book.get("ownerId", ""),
+        owner=OwnerRef(id=book["owner"]["id"]),
         status=book.get("status", "UPLOADING"),
         createdAt=book.get("createdAt"),
         updatedAt=book.get("updatedAt"),
@@ -144,5 +152,6 @@ async def build_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     if not book:
         raise HTTPException(404, "Book not found")
     from app.tasks.build_book import build_book as build_book_task
+    logger.info("build_book endpoint book_id=%s queued build_book task", book_id)
     build_book_task.delay(book_id)
     return {"status": "BUILDING"}

@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 from datetime import datetime
 
+from app.schemas.refs import SectionRef, TranslatorRef, ApprovedByRef
+
 
 class TranslationSubmit(BaseModel):
     translatedText: str
@@ -9,13 +11,13 @@ class TranslationSubmit(BaseModel):
 
 class TranslationResponse(BaseModel):
     id: str
-    sectionId: str
-    translatorId: str
+    section: SectionRef
+    translator: TranslatorRef
     translatorName: str | None = None
     translatedText: str
     exactLetterTranslation: str | None = None
     isApproved: bool = False
-    approvedBy: str | None = None
+    approvedBy: ApprovedByRef | None = None
     createdAt: datetime | None = None
 
 

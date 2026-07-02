@@ -13,18 +13,18 @@ packages/typescript-config — @repo/typescript-config
 
 ## Commands (run from root)
 
-| Command | Effect |
-|---------|--------|
-| `pnpm dev` | Start all dev servers (web:3000) |
-| `pnpm build` | Build all packages & apps |
-| `pnpm lint` | Turbo lint (strict: `--max-warnings 0`) |
-| `pnpm check-types` | Turbo typecheck (`next typegen && tsc --noEmit`) |
-| `pnpm format` | Prettier across `**/*.{ts,tsx,md}` |
-| `pnpm --filter=web <script>` | Run script for a single app/package |
-| `pnpm --filter=web test` | Run Vitest unit tests (33 tests across 6 files) |
+| Command                                                | Effect                                                   |
+| ------------------------------------------------------ | -------------------------------------------------------- |
+| `pnpm dev`                                             | Start all dev servers (web:3000)                         |
+| `pnpm build`                                           | Build all packages & apps                                |
+| `pnpm lint`                                            | Turbo lint (strict: `--max-warnings 0`)                  |
+| `pnpm check-types`                                     | Turbo typecheck (`next typegen && tsc --noEmit`)         |
+| `pnpm format`                                          | Prettier across `**/*.{ts,tsx,md}`                       |
+| `pnpm --filter=web <script>`                           | Run script for a single app/package                      |
+| `pnpm --filter=web test`                               | Run Vitest unit tests (33 tests across 6 files)          |
 | `docker compose -f infra/docker-compose.dev.yml up -d` | Start infra only (MongoDB, Redis, MinIO, LibreTranslate) |
-| `docker compose -f infra/docker-compose.yml up -d` | Start all services (production — build first) |
-| `docker compose -f infra/docker-compose.yml down` | Stop all services |
+| `docker compose -f infra/docker-compose.yml up -d`     | Start all services (production — build first)            |
+| `docker compose -f infra/docker-compose.yml down`      | Stop all services                                        |
 
 ### API backend
 
@@ -71,6 +71,7 @@ cd apps/api && celery -A app.tasks.celery_app worker --loglevel=info
 ## Coding style
 
 Follow `~/.claude/CLAUDE.md` conventions (in user home, not repo). Key rules from there:
+
 - Arrow functions, no `function` keyword.
 - `const`/`let`, no `var`.
 - `import`, no `require`.

@@ -1,10 +1,12 @@
 from pydantic import BaseModel
 from datetime import datetime
 
+from app.schemas.refs import BookRef
+
 
 class PageResponse(BaseModel):
     id: str
-    bookId: str
+    book: BookRef
     pageNumber: int
     originalPageNumber: str
     imageKey: str | None = None
@@ -21,3 +23,4 @@ class PageListItem(BaseModel):
     status: str
     sectionCount: int = 0
     translatedPercent: float = 0
+    thumbnailUrl: str | None = None

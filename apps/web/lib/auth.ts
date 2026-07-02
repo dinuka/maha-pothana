@@ -1,6 +1,8 @@
 import NextAuth from "next-auth"
 import type { NextAuthResult } from "next-auth"
 import Google from "next-auth/providers/google"
+import { publicEnv } from "./env/publicEnv"
+import { serverEnv } from "./env/serverEnv"
 
 export const ROLES = {
   SUPER_ADMIN: "SUPER_ADMIN",
@@ -21,8 +23,8 @@ interface AuthUser {
 const result: NextAuthResult = NextAuth({
   providers: [
     Google({
-      clientId: process.env.AUTH_GOOGLE_ID!,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+      clientId: serverEnv.authGoogleId,
+      clientSecret: serverEnv.authGoogleSecret,
     }),
   ],
   callbacks: {
@@ -30,7 +32,7 @@ const result: NextAuthResult = NextAuth({
       if (account?.provider === "google") {
         const authUser = user as unknown as AuthUser
         try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`, {
+          const res = await fetch(`${publicEnv.apiUrl}/api/auth/google`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -54,13 +56,19 @@ const result: NextAuthResult = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         const authUser = user as unknown as AuthUser
-        Object.assign(token, { roles: authUser.roles ?? [ROLES.EDITOR, ROLES.TRANSLATOR], id: authUser.id })
+        Object.assign(token, {
+          roles: authUser.roles ?? [ROLES.EDITOR, ROLES.TRANSLATOR],
+          id: authUser.id,
+        })
       }
       return token
     },
     async session({ session, token }) {
       const tokenData = token as unknown as { roles: Role[]; id: string }
-      Object.assign(session.user, { roles: tokenData.roles ?? [ROLES.EDITOR, ROLES.TRANSLATOR], id: tokenData.id ?? "" })
+      Object.assign(session.user, {
+        roles: tokenData.roles ?? [ROLES.EDITOR, ROLES.TRANSLATOR],
+        id: tokenData.id ?? "",
+      })
       return session
     },
   },

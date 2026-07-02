@@ -10,7 +10,9 @@ export default async function DashboardPage() {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.greeting}>Welcome, {(session?.user as unknown as { name?: string })?.name ?? "User"}</h1>
+      <h1 style={styles.greeting}>
+        Welcome, {(session?.user as unknown as { name?: string })?.name ?? "User"}
+      </h1>
       <div style={styles.grid}>
         {isEditor && (
           <Link href="/books" style={styles.card}>

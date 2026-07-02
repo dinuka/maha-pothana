@@ -57,6 +57,7 @@ Nginx reverse-proxies `/api/*` to FastAPI (port 8000) and `/*` to Next.js (port 
 - Tests in `__tests__/` use Vitest + jsdom + `@testing-library/react`. The alias `@` maps to the `apps/web` root.
 
 Routes:
+
 ```
 /                          → Landing page
 /auth/signin               → Google SSO
@@ -75,6 +76,7 @@ Routes:
 FastAPI with Motor (async MongoDB) and Celery + Redis.
 
 Module layout:
+
 - `app/config.py` — settings loaded from env
 - `app/db/` — Motor client + startup index creation
 - `app/api/` — FastAPI routers (auth, books, pages, sections, translations, users)
@@ -84,6 +86,7 @@ Module layout:
 - `app/models/` — MongoDB document shape types
 
 Backend conventions:
+
 - Motor raw driver, no Beanie ODM. `AsyncIOMotorDatabase` injected via `Depends(get_db)`.
 - Celery tasks use `run_async()` helper to call async Motor code from sync workers.
 - Backend tests use `pytest-asyncio` (asyncio_mode = auto), `httpx.AsyncClient` with `ASGITransport`, and mock `AsyncIOMotorDatabase` via `unittest.mock.AsyncMock`.
@@ -92,9 +95,11 @@ Backend conventions:
 ### File Storage (MinIO)
 
 S3 key layout:
+
 ```
 books/{bookId}/original.pdf
 books/{bookId}/pages/{pageNum}.png
+books/{bookId}/thumbnails/{pageNum}.png
 books/{bookId}/sections/{sectionId}.png
 books/{bookId}/thumbnail.png
 books/{bookId}/finalized.pdf

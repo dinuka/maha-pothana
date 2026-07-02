@@ -27,9 +27,20 @@ const SECTION_COLORS: Record<string, string> = {
   OTHER: "#8B5CF6",
 }
 
-const SECTION_TYPES = ["HEADER", "PARAGRAPH", "FOOTNOTE", "IMAGE_CAPTION", "PAGE_NUMBER", "OTHER"] as const
+const SECTION_TYPES = [
+  "HEADER",
+  "PARAGRAPH",
+  "FOOTNOTE",
+  "IMAGE_CAPTION",
+  "PAGE_NUMBER",
+  "OTHER",
+] as const
 
-export default function PageEditor({ pageImageUrl, initialSections = [], onSave }: PageEditorProps) {
+export default function PageEditor({
+  pageImageUrl,
+  initialSections = [],
+  onSave,
+}: PageEditorProps) {
   const [sections, setSections] = useState<Section[]>(initialSections)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -70,9 +81,7 @@ export default function PageEditor({ pageImageUrl, initialSections = [], onSave 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleDragEnd = useCallback((id: string, e: any) => {
     setSections((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, x: e.target.x(), y: e.target.y() } : s
-      )
+      prev.map((s) => (s.id === id ? { ...s, x: e.target.x(), y: e.target.y() } : s)),
     )
   }, [])
 
@@ -89,8 +98,8 @@ export default function PageEditor({ pageImageUrl, initialSections = [], onSave 
               width: node.width() * node.scaleX(),
               height: node.height() * node.scaleY(),
             }
-          : s
-      )
+          : s,
+      ),
     )
   }, [])
 
@@ -172,16 +181,24 @@ export default function PageEditor({ pageImageUrl, initialSections = [], onSave 
               style={styles.typeSelect}
             >
               {SECTION_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>
+                  {t}
+                </option>
               ))}
             </select>
           )}
         </div>
         <div style={styles.toolbarRight}>
-          <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))} style={styles.zoomBtn}>-</button>
+          <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))} style={styles.zoomBtn}>
+            -
+          </button>
           <span style={styles.zoomLabel}>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom((z) => Math.min(3, z + 0.1))} style={styles.zoomBtn}>+</button>
-          <button onClick={handleSave} style={styles.saveBtn}>Confirm Sections</button>
+          <button onClick={() => setZoom((z) => Math.min(3, z + 0.1))} style={styles.zoomBtn}>
+            +
+          </button>
+          <button onClick={handleSave} style={styles.saveBtn}>
+            Confirm Sections
+          </button>
         </div>
       </div>
 
@@ -199,7 +216,13 @@ export default function PageEditor({ pageImageUrl, initialSections = [], onSave 
             style={{ background: "#f0f0f0", borderRadius: 8 }}
           >
             <Layer>
-              <Rect x={0} y={0} width={imageSize.width} height={imageSize.height} fillPatternImage={undefined} />
+              <Rect
+                x={0}
+                y={0}
+                width={imageSize.width}
+                height={imageSize.height}
+                fillPatternImage={undefined}
+              />
               <Text text="Page image would render here" x={20} y={20} fontSize={14} fill="#999" />
             </Layer>
             <Layer>

@@ -4,6 +4,8 @@ from bson import ObjectId
 
 from app.db.client import get_db
 from app.schemas.page import PageResponse, PageListItem
+from app.schemas.refs import BookRef
+from app.services.s3 import get_presigned_url
 from app.tasks.detect_sections import detect_sections
 from app.tasks.crop_sections import crop_sections
 from app.api.deps import get_current_user
@@ -13,11 +15,13 @@ router = APIRouter()
 
 @router.get("/api/books/{book_id}/pages")
 async def list_pages(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    cursor = db.pages.find({"bookId": book_id}).sort("pageNumber", 1)
+    cursor = db.pages.find({"book.id": book_id}).sort("pageNumber", 1)
     pages = await cursor.to_list(length=10000)
     result = []
     for page in pages:
-        section_count = await db.sections.count_documents({"pageId": str(page["_id"])})
+        section_count = await db.sections.count_documents({"page.id": str(page["_id"])})
+        thumbnail_key = page.get("thumbnailKey")
+        thumbnail_url = await get_presigned_url(thumbnail_key) if thumbnail_key else None
         result.append(
             PageListItem(
                 id=str(page["_id"]),
@@ -25,6 +29,7 @@ async def list_pages(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
                 originalPageNumber=page.get("originalPageNumber", str(page["pageNumber"])),
                 status=page.get("status", "PENDING"),
                 sectionCount=section_count,
+                thumbnailUrl=thumbnail_url,
             )
         )
     return result
@@ -32,17 +37,17 @@ async def list_pages(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
 
 @router.get("/api/books/{book_id}/pages/{page_num}")
 async def get_page(book_id: str, page_num: int, db: AsyncIOMotorDatabase = Depends(get_db)):
-    page = await db.pages.find_one({"bookId": book_id, "pageNumber": page_num})
+    page = await db.pages.find_one({"book.id": book_id, "pageNumber": page_num})
     if not page:
         raise HTTPException(404, "Page not found")
 
-    sections_cursor = db.sections.find({"pageId": str(page["_id"])}).sort("sectionOrder", 1)
+    sections_cursor = db.sections.find({"page.id": str(page["_id"])}).sort("sectionOrder", 1)
     sections = await sections_cursor.to_list(length=200)
 
     return {
         "page": PageResponse(
             id=str(page["_id"]),
-            bookId=page["bookId"],
+            book=BookRef(id=page["book"]["id"]),
             pageNumber=page["pageNumber"],
             originalPageNumber=page.get("originalPageNumber", str(page["pageNumber"])),
             imageKey=page.get("imageKey"),
@@ -54,7 +59,7 @@ async def get_page(book_id: str, page_num: int, db: AsyncIOMotorDatabase = Depen
         "sections": [
             {
                 "id": str(s["_id"]),
-                "pageId": s["pageId"],
+                "page": {"id": s["page"]["id"]},
                 "sectionOrder": s["sectionOrder"],
                 "type": s.get("type", "PARAGRAPH"),
                 "x": s.get("x", 0),
@@ -84,11 +89,11 @@ async def save_sections(page_id: str, body: list[dict], db: AsyncIOMotorDatabase
     if not page:
         raise HTTPException(404, "Page not found")
 
-    await db.sections.delete_many({"pageId": page_id})
+    await db.sections.delete_many({"page.id": page_id})
 
     for sec in body:
         await db.sections.insert_one({
-            "pageId": page_id,
+            "page": {"id": page_id},
             "sectionOrder": sec.get("sectionOrder", 0),
             "type": sec.get("type", "PARAGRAPH"),
             "x": sec.get("x", 0),

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { publicEnv } from "@/lib/env/publicEnv"
 
 const LANGUAGES = [
   { value: "si", label: "Sinhala" },
@@ -28,7 +29,7 @@ export default function UploadBookPage() {
 
   const toggleTargetLanguage = (lang: string) => {
     setTargetLanguages((prev) =>
-      prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]
+      prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang],
     )
   }
 
@@ -50,8 +51,13 @@ export default function UploadBookPage() {
     formData.append("file", file)
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/books`, {
+      const tokenRes = await fetch("/api/auth/token")
+      if (!tokenRes.ok) throw new Error("Not authenticated")
+      const { token } = await tokenRes.json()
+
+      const res = await fetch(`${publicEnv.apiUrl}/api/books`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
       if (!res.ok) {
@@ -90,10 +96,16 @@ export default function UploadBookPage() {
         </label>
         <label style={styles.label}>
           Source Language *
-          <select value={sourceLanguage} onChange={(e) => setSourceLanguage(e.target.value)} style={styles.input}>
+          <select
+            value={sourceLanguage}
+            onChange={(e) => setSourceLanguage(e.target.value)}
+            style={styles.input}
+          >
             <option value="">Select source language</option>
             {LANGUAGES.map((lang) => (
-              <option key={lang.value} value={lang.value}>{lang.label}</option>
+              <option key={lang.value} value={lang.value}>
+                {lang.label}
+              </option>
             ))}
           </select>
         </label>
@@ -107,9 +119,13 @@ export default function UploadBookPage() {
                 onClick={() => toggleTargetLanguage(lang.value)}
                 style={{
                   ...styles.chip,
-                  background: targetLanguages.includes(lang.value) ? "var(--primary)" : "var(--surface)",
+                  background: targetLanguages.includes(lang.value)
+                    ? "var(--primary)"
+                    : "var(--surface)",
                   color: targetLanguages.includes(lang.value) ? "#fff" : "var(--foreground)",
-                  borderColor: targetLanguages.includes(lang.value) ? "var(--primary)" : "var(--border)",
+                  borderColor: targetLanguages.includes(lang.value)
+                    ? "var(--primary)"
+                    : "var(--border)",
                 }}
               >
                 {lang.label}
@@ -132,7 +148,10 @@ export default function UploadBookPage() {
             borderColor: dragOver ? "var(--primary)" : "var(--border)",
             background: dragOver ? "var(--surface)" : "transparent",
           }}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setDragOver(true)
+          }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
             e.preventDefault()
@@ -143,7 +162,9 @@ export default function UploadBookPage() {
           }}
         >
           {file ? (
-            <p>{file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)</p>
+            <p>
+              {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)
+            </p>
           ) : (
             <p>Drag & drop a PDF here, or click to select</p>
           )}
@@ -154,7 +175,11 @@ export default function UploadBookPage() {
             style={{ display: "none" }}
             id="file-input"
           />
-          <button type="button" onClick={() => document.getElementById("file-input")?.click()} style={styles.fileButton}>
+          <button
+            type="button"
+            onClick={() => document.getElementById("file-input")?.click()}
+            style={styles.fileButton}
+          >
             Select PDF
           </button>
         </div>

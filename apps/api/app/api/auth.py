@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
 from datetime import datetime, timezone
 
 from app.db.client import get_db
@@ -52,7 +53,7 @@ async def get_me(
 ):
     if not user_id:
         raise HTTPException(401, "Not authenticated")
-    user = await db.users.find_one({"_id": user_id})
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(404, "User not found")
     return MeResponse(

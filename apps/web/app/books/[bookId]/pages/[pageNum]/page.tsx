@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiClient"
 import Link from "next/link"
 import PageEditor from "@/components/PageEditor"
 
@@ -20,10 +21,7 @@ interface PageDetail {
 
 async function getPage(bookId: string, pageNum: string): Promise<PageDetail | null> {
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/books/${bookId}/pages/${pageNum}`,
-      { cache: "no-store" }
-    )
+    const res = await apiFetch(`/api/books/${bookId}/pages/${pageNum}`, { cache: "no-store" })
     if (res.ok) return res.json()
   } catch {
     /* noop */
@@ -42,7 +40,9 @@ export default async function PageEditorPage({
   return (
     <div style={styles.page}>
       <div style={styles.header}>
-        <Link href={`/books/${bookId}`} style={styles.backLink}>← Back to book</Link>
+        <Link href={`/books/${bookId}`} style={styles.backLink}>
+          ← Back to book
+        </Link>
         <h1 style={styles.title}>Page {pageNum}</h1>
         {page && <span style={styles.badge}>{page.status}</span>}
       </div>
@@ -52,7 +52,7 @@ export default async function PageEditorPage({
         initialSections={page?.sections ?? []}
         onSave={async (sections) => {
           "use server"
-          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/pages/${page?.id}/sections`, {
+          await apiFetch(`/api/pages/${page?.id}/sections`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sections }),
