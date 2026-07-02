@@ -1,9 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import { publicEnv } from "@/lib/env/publicEnv"
 import { PageStatus } from "@/lib/types"
+
+const FIRST_BATCH_SIZE = 35
+const NEXT_BATCH_SIZE = 7
 
 interface Page {
   id: string
@@ -13,6 +16,13 @@ interface Page {
   thumbnailUrl?: string | null
   sectionCount?: number
   translatedPercent?: number
+}
+
+interface PageListResponse {
+  items: Page[]
+  total: number
+  skip: number
+  limit: number
 }
 
 interface BookDetail {
@@ -45,15 +55,34 @@ async function getBook(bookId: string): Promise<BookDetail | null> {
   return null
 }
 
-async function getPages(bookId: string): Promise<Page[]> {
+interface GetPagesParams {
+  statusFilter: "ALL" | PageStatus
+  sortBy: "PAGE_NUMBER" | "PROGRESS"
+  skip: number
+  limit: number
+}
+
+async function getPages(
+  bookId: string,
+  { statusFilter, sortBy, skip, limit }: GetPagesParams,
+): Promise<PageListResponse | null> {
   try {
-    const res = await fetchWithAuth(`/api/books/${bookId}/pages`)
+    const query = new URLSearchParams({
+      status: statusFilter,
+      sort: sortBy,
+      skip: String(skip),
+      limit: String(limit),
+    })
+    const res = await fetch(`/api/books/${bookId}/pages?${query.toString()}`, { cache: "no-store" })
     if (res.ok) return await res.json()
   } catch {
     /* noop */
   }
-  return []
+  return null
 }
+
+const isPagesReady = (bookStatus: string) =>
+  bookStatus === "READY" || bookStatus === "BUILDING" || bookStatus === "COMPLETED"
 
 export default function BookConsolePage({ params }: { params: Promise<{ bookId: string }> }) {
   const [bookId, setBookId] = useState<string | null>(null)
@@ -62,6 +91,17 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<"ALL" | PageStatus>("ALL")
   const [sortBy, setSortBy] = useState<"PAGE_NUMBER" | "PROGRESS">("PAGE_NUMBER")
+  const [skip, setSkip] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  // These refs are the source of truth for the observer callback/loadMore guard;
+  // they're updated synchronously (not via effect) so two intersections firing
+  // before React commits a render don't both pass the loadingMore/skip check.
+  const skipRef = useRef(skip)
+  const hasMoreRef = useRef(hasMore)
+  const loadingMoreRef = useRef(loadingMore)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     params.then(({ bookId }) => setBookId(bookId))
@@ -74,14 +114,26 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
     let pollTimer: ReturnType<typeof setTimeout> | null = null
 
     const fetchData = async () => {
+      setPages([])
+      skipRef.current = 0
+      setSkip(0)
+      hasMoreRef.current = true
+      setHasMore(true)
+
       const b = await getBook(bookId!)
       if (cancelled) return
       if (b) {
         setBook(b)
-        if (b.status === "READY" || b.status === "BUILDING" || b.status === "COMPLETED") {
-          const p = await getPages(bookId!)
-          if (!cancelled) {
-            setPages(p)
+        if (isPagesReady(b.status)) {
+          const p = await getPages(bookId!, { statusFilter, sortBy, skip: 0, limit: FIRST_BATCH_SIZE })
+          if (!cancelled && p) {
+            const nextSkip = p.skip + p.items.length
+            const nextHasMore = nextSkip < p.total
+            setPages(p.items)
+            skipRef.current = nextSkip
+            setSkip(nextSkip)
+            hasMoreRef.current = nextHasMore
+            setHasMore(nextHasMore)
             setLoading(false)
             return
           }
@@ -99,7 +151,44 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
       cancelled = true
       if (pollTimer) clearTimeout(pollTimer)
     }
-  }, [bookId])
+  }, [bookId, statusFilter, sortBy])
+
+  const loadMore = useCallback(async () => {
+    if (!bookId || !hasMoreRef.current || loadingMoreRef.current) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    const p = await getPages(bookId, {
+      statusFilter,
+      sortBy,
+      skip: skipRef.current,
+      limit: NEXT_BATCH_SIZE,
+    })
+    if (p) {
+      const nextSkip = p.skip + p.items.length
+      const nextHasMore = nextSkip < p.total
+      setPages((prev) => [...prev, ...p.items])
+      skipRef.current = nextSkip
+      setSkip(nextSkip)
+      hasMoreRef.current = nextHasMore
+      setHasMore(nextHasMore)
+    }
+    loadingMoreRef.current = false
+    setLoadingMore(false)
+  }, [bookId, statusFilter, sortBy])
+
+  useEffect(() => {
+    if (!book || !isPagesReady(book.status)) return
+    if (pages.length === 0 || !hasMore) return
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) loadMore()
+    })
+    observer.observe(sentinel)
+
+    return () => observer.disconnect()
+  }, [book, pages.length, hasMore, loadMore])
 
   if (!book && loading) {
     return (
@@ -126,14 +215,6 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
     borderColor: book.status === "READY" ? "var(--success)" : "var(--border)",
     color: book.status === "READY" ? "#fff" : "var(--foreground)",
   }
-
-  const visiblePages = pages
-    .filter((page) => statusFilter === "ALL" || page.status === statusFilter)
-    .sort((a, b) =>
-      sortBy === "PROGRESS"
-        ? (b.translatedPercent ?? 0) - (a.translatedPercent ?? 0)
-        : a.pageNumber - b.pageNumber,
-    )
 
   return (
     <div style={styles.page}>
@@ -184,7 +265,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
       )}
 
       <div style={styles.pageGrid}>
-        {visiblePages.map((page) => (
+        {pages.map((page) => (
           <Link
             key={page.id}
             href={`/books/${bookId}/pages/${page.pageNumber}`}
@@ -222,7 +303,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
             <div style={styles.pageNum}>{page.originalPageNumber || page.pageNumber}</div>
           </Link>
         ))}
-        {book.status === "READY" && visiblePages.length === 0 && (
+        {book.status === "READY" && pages.length === 0 && (
           <p
             style={{
               color: "var(--muted)",
@@ -236,6 +317,10 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
         )}
       </div>
 
+      {isPagesReady(book.status) && pages.length > 0 && hasMore && (
+        <div ref={sentinelRef} style={styles.sentinel} />
+      )}
+
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -247,6 +332,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
 
 const styles: Record<string, React.CSSProperties> = {
   page: { padding: 48, maxWidth: 960, margin: "0 auto" },
+  sentinel: { height: 1 },
   backLink: { color: "var(--muted)", fontSize: 14, display: "inline-block", marginBottom: 16 },
   header: { marginBottom: 32 },
   title: { fontSize: 28, fontWeight: 700, marginBottom: 8 },
