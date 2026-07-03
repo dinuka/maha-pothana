@@ -10,12 +10,12 @@
 
 The user reports the page editor is not working for the "Find sections of the page" spec section. Four root causes were identified through code analysis:
 
-| # | Issue | Location | Severity |
-|---|-------|----------|----------|
-| 1 | Page image never renders on canvas — `fillPatternImage` is hardcoded to `undefined` | `PageEditor.tsx:224` | **Critical** |
-| 2 | `pageImageUrl` receives raw S3 key (`imageKey`) instead of a presigned URL — browser cannot load the image | `page.tsx:51` + `pages.py:69` | **Critical** |
-| 3 | API `PUT /api/pages/{pageId}/sections` payload format mismatch — frontend sends `{ sections: [...] }`, backend expects raw `[...]` | `page.tsx:55-58` vs `pages.py:103` | **High** |
-| 4 | Section detection is a stub — creates one dummy PARAGRAPH section, no real ML model or LayoutParser integration | `detect_sections.py:30-42` | **Medium** |
+| #   | Issue                                                                                                                              | Location                           | Severity     |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------ |
+| 1   | Page image never renders on canvas — `fillPatternImage` is hardcoded to `undefined`                                                | `PageEditor.tsx:224`               | **Critical** |
+| 2   | `pageImageUrl` receives raw S3 key (`imageKey`) instead of a presigned URL — browser cannot load the image                         | `page.tsx:51` + `pages.py:69`      | **Critical** |
+| 3   | API `PUT /api/pages/{pageId}/sections` payload format mismatch — frontend sends `{ sections: [...] }`, backend expects raw `[...]` | `page.tsx:55-58` vs `pages.py:103` | **High**     |
+| 4   | Section detection is a stub — creates one dummy PARAGRAPH section, no real ML model or LayoutParser integration                    | `detect_sections.py:30-42`         | **Medium**   |
 
 ---
 
@@ -179,16 +179,16 @@ The user reports the page editor is not working for the "Find sections of the pa
 
 **Acceptance Criteria:**
 
-| Key | Action |
-|-----|--------|
-| `Delete` / `Backspace` | Delete selected section |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
-| `Escape` | Deselect current section / cancel draw mode |
-| `+` / `=` | Zoom in |
-| `-` | Zoom out |
-| `Ctrl+S` | Save/confirm sections |
-| `D` | Toggle draw mode (Add Section) |
+| Key                       | Action                                      |
+| ------------------------- | ------------------------------------------- |
+| `Delete` / `Backspace`    | Delete selected section                     |
+| `Ctrl+Z`                  | Undo                                        |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo                                        |
+| `Escape`                  | Deselect current section / cancel draw mode |
+| `+` / `=`                 | Zoom in                                     |
+| `-`                       | Zoom out                                    |
+| `Ctrl+S`                  | Save/confirm sections                       |
+| `D`                       | Toggle draw mode (Add Section)              |
 
 - Keyboard shortcuts only work when the canvas area is focused
 - Shortcuts are documented in a tooltip or help panel
@@ -198,16 +198,16 @@ The user reports the page editor is not working for the "Find sections of the pa
 
 ## Implementation Priority
 
-| Priority | Story | Effort | Impact |
-|----------|-------|--------|--------|
-| P0 | US-PEF-1: Render page image on canvas background | Small | Critical — editor cannot see page |
-| P0 | US-PEF-2: Pass presigned S3 URL instead of raw key | Small | Critical — image won't load |
-| P0 | US-PEF-3: Fix save sections API payload format | Small | Critical — sections can't be saved |
-| P1 | US-PEF-5: Canvas processing & error states | Medium | High — poor UX without feedback |
-| P1 | US-PEF-7: Section order preservation | Small | High — incorrect section ordering |
-| P2 | US-PEF-4: Redesign section detection with ML | Large | Medium — stub works for demo only |
-| P2 | US-PEF-6: Undo/redo support | Medium | Medium — quality of life |
-| P3 | US-PEF-8: Keyboard shortcuts | Small | Low — nice to have |
+| Priority | Story                                              | Effort | Impact                             |
+| -------- | -------------------------------------------------- | ------ | ---------------------------------- |
+| P0       | US-PEF-1: Render page image on canvas background   | Small  | Critical — editor cannot see page  |
+| P0       | US-PEF-2: Pass presigned S3 URL instead of raw key | Small  | Critical — image won't load        |
+| P0       | US-PEF-3: Fix save sections API payload format     | Small  | Critical — sections can't be saved |
+| P1       | US-PEF-5: Canvas processing & error states         | Medium | High — poor UX without feedback    |
+| P1       | US-PEF-7: Section order preservation               | Small  | High — incorrect section ordering  |
+| P2       | US-PEF-4: Redesign section detection with ML       | Large  | Medium — stub works for demo only  |
+| P2       | US-PEF-6: Undo/redo support                        | Medium | Medium — quality of life           |
+| P3       | US-PEF-8: Keyboard shortcuts                       | Small  | Low — nice to have                 |
 
 ---
 

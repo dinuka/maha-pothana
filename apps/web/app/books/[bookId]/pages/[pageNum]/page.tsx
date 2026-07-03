@@ -26,12 +26,20 @@ interface PageDetail {
 
 async function getPage(bookId: string, pageNum: string): Promise<PageDetail | null> {
   try {
-    const res = await apiFetch(`/api/books/${bookId}/pages/${pageNum}`, { cache: "no-store" });
+    const res = await apiFetch(`/api/books/${bookId}/pages/${pageNum}`, { cache: "no-store" })
     if (res.ok) return res.json()
   } catch {
     /* noop */
   }
   return null
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  PROCESSING: "Processing",
+  SECTIONS_CONFIRMED: "Sections Confirmed",
+  DETECTION_FAILED: "Detection Failed",
+  READY: "Ready",
 }
 
 export default async function PageEditorPage({
@@ -49,11 +57,15 @@ export default async function PageEditorPage({
           ← Back to book
         </Link>
         <h1 style={styles.title}>Page {pageNum}</h1>
-        {page && <span style={styles.badge}>{page.page.status}</span>}
+        {page && (
+          <span style={styles.badge}>{STATUS_LABELS[page.page.status] ?? page.page.status}</span>
+        )}
       </div>
 
       <PageEditorWrapper
         pageId={page?.page.id ?? ""}
+        bookId={bookId}
+        pageNum={pageNum}
         pageImageUrl={page?.page.imageUrl}
         initialSections={page?.sections ?? []}
       />
@@ -62,7 +74,7 @@ export default async function PageEditorPage({
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { padding: 32, maxWidth: 1200, margin: "0 auto", overflowX: "hidden" },
+  page: { padding: 32, maxWidth: 1200, margin: "0 auto" },
   header: {
     display: "flex",
     alignItems: "center",

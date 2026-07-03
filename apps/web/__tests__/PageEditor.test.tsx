@@ -26,14 +26,20 @@ const mockSections = [
 function setupMockImage(onloadFire: "sync" | "never" = "sync") {
   const MockImage = function (this: void) {
     const img: Record<string, unknown> = {
-      onload: null, onerror: null, crossOrigin: "", width: 800, height: 600,
+      onload: null,
+      onerror: null,
+      crossOrigin: "",
+      width: 800,
+      height: 600,
     }
     Object.defineProperty(img, "src", {
-      get() { return "" },
+      get() {
+        return ""
+      },
       set(value: string) {
         if (!value) return
         if (onloadFire === "sync" && typeof img.onload === "function") {
-          (img.onload as () => void)()
+          ;(img.onload as () => void)()
         }
       },
       configurable: true,
@@ -59,17 +65,21 @@ describe("PageEditor — no image", () => {
   })
 
   it("renders no image message when no url", () => {
-    flushSync(() => { root.render(React.createElement(PageEditor)) })
+    flushSync(() => {
+      root.render(React.createElement(PageEditor))
+    })
     expect(document.body.textContent).toContain("No page image available")
   })
 
   it("shows loading state when url provided", () => {
-    flushSync(() => { root.render(React.createElement(PageEditor, { pageImageUrl: "/test.png" })) })
+    flushSync(() => {
+      root.render(React.createElement(PageEditor, { pageImageUrl: "/test.png" }))
+    })
     expect(document.body.textContent).toContain("Loading page image...")
-    expect(document.body.textContent).toContain("Add Section")
-    expect(document.body.textContent).toContain("Delete")
+    expect(document.body.textContent).toContain("Add")
+    expect(container.querySelector('button[title*="Delete section"]')).not.toBeNull()
     expect(document.body.textContent).toContain("100%")
-    expect(document.body.textContent).toContain("Confirm Sections")
+    expect(document.body.textContent).toContain("Confirm")
   })
 })
 
@@ -92,22 +102,24 @@ describe("PageEditor — loaded (mock Image sync onload)", () => {
 
   function renderWithProps(props: Record<string, unknown> = {}) {
     flushSync(() => {
-      root.render(React.createElement(PageEditor, {
-        pageImageUrl: "/test.png",
-        initialSections: mockSections,
-        ...props,
-      }))
+      root.render(
+        React.createElement(PageEditor, {
+          pageImageUrl: "/test.png",
+          initialSections: mockSections,
+          ...props,
+        }),
+      )
     })
   }
 
   it("renders toolbar and stage", () => {
     renderWithProps()
-    expect(document.body.textContent).toContain("Add Section")
-    expect(document.body.textContent).toContain("Delete")
-    expect(document.body.textContent).toContain("Undo")
-    expect(document.body.textContent).toContain("Redo")
+    expect(container.querySelector('button[title*="Add section"]')).not.toBeNull()
+    expect(container.querySelector('button[title*="Delete section"]')).not.toBeNull()
+    expect(container.querySelector('button[title*="Undo"]')).not.toBeNull()
+    expect(container.querySelector('button[title*="Redo"]')).not.toBeNull()
     expect(document.body.textContent).toContain("100%")
-    expect(document.body.textContent).toContain("Confirm Sections")
+    expect(document.body.textContent).toContain("Confirm")
     expect(document.querySelector('[data-testid="stage"]')).not.toBeNull()
     const rects = document.querySelectorAll('[data-testid="rect"]')
     expect(rects.length).toBe(2)
@@ -133,8 +145,8 @@ describe("PageEditor — loaded (mock Image sync onload)", () => {
 
   it("confirm button is enabled with sections", () => {
     renderWithProps()
-    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Confirm"),
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Confirm"),
     ) as HTMLButtonElement
     expect(confirmBtn).not.toBeNull()
     expect(confirmBtn.disabled).toBe(false)
@@ -143,8 +155,8 @@ describe("PageEditor — loaded (mock Image sync onload)", () => {
   it("calls onSave with ordered sections on confirm", () => {
     const onSave = vi.fn()
     renderWithProps({ onSave })
-    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Confirm"),
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Confirm"),
     ) as HTMLButtonElement
     confirmBtn.click()
     expect(onSave).toHaveBeenCalledTimes(1)
@@ -156,52 +168,47 @@ describe("PageEditor — loaded (mock Image sync onload)", () => {
 
   it("delete button is disabled when no selection", () => {
     renderWithProps()
-    const deleteBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Delete"),
+    const deleteBtn = container.querySelector(
+      'button[title*="Delete section"]',
     ) as HTMLButtonElement
-    // With no section selected, Delete should be disabled (opacity 0.5 via style)
+    expect(deleteBtn).not.toBeNull()
     expect(deleteBtn.disabled).toBe(true)
   })
 
   it("draw toggle button changes text", () => {
     renderWithProps({ key: "draw" })
-    const drawBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Add Section"),
-    ) as HTMLButtonElement
-    expect(drawBtn.textContent).toContain("Add Section")
+    const drawBtn = container.querySelector('button[title*="Add section"]') as HTMLButtonElement
+    expect(drawBtn).not.toBeNull()
+    expect(drawBtn.textContent).toContain("Add")
     drawBtn.click()
     flushSync(() => {})
-    expect(document.body.textContent).toContain("Cancel Draw")
+    expect(document.body.textContent).toContain("Cancel")
   })
 
   it("undo button is disabled initially", () => {
     renderWithProps()
-    const undoBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Undo"),
-    ) as HTMLButtonElement
+    const undoBtn = container.querySelector('button[title*="Undo"]') as HTMLButtonElement
+    expect(undoBtn).not.toBeNull()
     expect(undoBtn.disabled).toBe(true)
   })
 
   it("redo button is disabled initially", () => {
     renderWithProps()
-    const redoBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Redo"),
-    ) as HTMLButtonElement
+    const redoBtn = container.querySelector('button[title*="Redo"]') as HTMLButtonElement
+    expect(redoBtn).not.toBeNull()
     expect(redoBtn.disabled).toBe(true)
   })
 
   it("confirm shows loading state when unsaved changes exist then clears", () => {
     const onSave = vi.fn().mockImplementation(() => {})
     renderWithProps({ onSave })
-    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Confirm"),
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Confirm"),
     ) as HTMLButtonElement
     confirmBtn.click()
     expect(onSave).toHaveBeenCalledTimes(1)
     // After save, undo/redo stacks should be cleared
-    const undoBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Undo"),
-    ) as HTMLButtonElement
+    const undoBtn = container.querySelector('button[title*="Undo"]') as HTMLButtonElement
     expect(undoBtn.disabled).toBe(true)
   })
 })
@@ -225,14 +232,16 @@ describe("PageEditor — loaded, no sections (mock Image sync onload)", () => {
 
   it("shows no sections message when image loaded with empty sections", () => {
     flushSync(() => {
-      root.render(React.createElement(PageEditor, {
-        pageImageUrl: "/test.png",
-        initialSections: [],
-      }))
+      root.render(
+        React.createElement(PageEditor, {
+          pageImageUrl: "/test.png",
+          initialSections: [],
+        }),
+      )
     })
     expect(document.body.textContent).toContain("No sections yet")
-    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Confirm"),
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Confirm"),
     ) as HTMLButtonElement
     expect(confirmBtn.disabled).toBe(true)
   })
@@ -247,10 +256,16 @@ describe("PageEditor — error state (mock Image that never fires)", () => {
     // For error state, mock needs to fire onerror
     const MockImage = function (this: void) {
       const img: Record<string, unknown> = {
-        onload: null, onerror: null, crossOrigin: "", width: 800, height: 600,
+        onload: null,
+        onerror: null,
+        crossOrigin: "",
+        width: 800,
+        height: 600,
       }
       Object.defineProperty(img, "src", {
-        get() { return "" },
+        get() {
+          return ""
+        },
         set(value: string) {
           if (!value) return
           if (typeof img.onerror === "function") (img.onerror as () => void)()

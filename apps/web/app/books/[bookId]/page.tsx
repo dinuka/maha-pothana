@@ -125,7 +125,12 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
       if (b) {
         setBook(b)
         if (isPagesReady(b.status)) {
-          const p = await getPages(bookId!, { statusFilter, sortBy, skip: 0, limit: FIRST_BATCH_SIZE })
+          const p = await getPages(bookId!, {
+            statusFilter,
+            sortBy,
+            skip: 0,
+            limit: FIRST_BATCH_SIZE,
+          })
           if (!cancelled && p) {
             const nextSkip = p.skip + p.items.length
             const nextHasMore = nextSkip < p.total

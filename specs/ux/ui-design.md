@@ -133,35 +133,35 @@
 
 #### Image Loading
 
-| State | Visual | Description |
-|-------|--------|-------------|
-| **Loading** | Skeleton placeholder (aspect-ratio matching container) + spinner icon with "Loading page image..." | While `HTMLImageElement` loads from presigned S3 URL |
-| **Loaded** | Page image rendered as `<Rect fillPatternImage={imgElement}>` or `<Konva.Image>` covering full stage | Image element stored in `useState` and passed to canvas |
-| **No image** | Centered message: "No page image available" + subtitle "Upload a book and process it to see pages here" | When `pageImageUrl` is null/undefined |
-| **Error** | Centered message: "Failed to load page image" + [Retry] button | When `img.onerror` fires |
+| State        | Visual                                                                                                  | Description                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **Loading**  | Skeleton placeholder (aspect-ratio matching container) + spinner icon with "Loading page image..."      | While `HTMLImageElement` loads from presigned S3 URL    |
+| **Loaded**   | Page image rendered as `<Rect fillPatternImage={imgElement}>` or `<Konva.Image>` covering full stage    | Image element stored in `useState` and passed to canvas |
+| **No image** | Centered message: "No page image available" + subtitle "Upload a book and process it to see pages here" | When `pageImageUrl` is null/undefined                   |
+| **Error**    | Centered message: "Failed to load page image" + [Retry] button                                          | When `img.onerror` fires                                |
 
 #### Section Operations
 
-| State | Visual | Description |
-|-------|--------|-------------|
-| **Empty** | Canvas shows just the page image. Bottom overlay hint: "No sections yet. Click 'Detect Sections' or draw manually." | No sections loaded |
-| **Detected** | Colored rectangles overlaid on image with type labels | Sections loaded from API or detection |
-| **Selected** | Rectangle has thicker white border (2px), Transform handles at corners/edges, type selector appears in toolbar | User clicks a rectangle |
-| **Hover** | Rectangle opacity increases (fill becomes more opaque), cursor becomes pointer | Mouse hovers over a rectangle |
-| **Drawing** | Crosshair cursor, dashed preview rectangle follows mouse on drag, "Cancel Draw" button highlighted | Toggle draw mode active |
-| **Detecting** | Semi-transparent overlay with spinner + "Detecting sections..." message, all toolbar buttons disabled except zoom | Detection API in progress |
-| **Saving** | "Confirm Sections" button shows spinner, all edit buttons disabled | Save API in progress |
+| State         | Visual                                                                                                              | Description                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **Empty**     | Canvas shows just the page image. Bottom overlay hint: "No sections yet. Click 'Detect Sections' or draw manually." | No sections loaded                    |
+| **Detected**  | Colored rectangles overlaid on image with type labels                                                               | Sections loaded from API or detection |
+| **Selected**  | Rectangle has thicker white border (2px), Transform handles at corners/edges, type selector appears in toolbar      | User clicks a rectangle               |
+| **Hover**     | Rectangle opacity increases (fill becomes more opaque), cursor becomes pointer                                      | Mouse hovers over a rectangle         |
+| **Drawing**   | Crosshair cursor, dashed preview rectangle follows mouse on drag, "Cancel Draw" button highlighted                  | Toggle draw mode active               |
+| **Detecting** | Semi-transparent overlay with spinner + "Detecting sections..." message, all toolbar buttons disabled except zoom   | Detection API in progress             |
+| **Saving**    | "Confirm Sections" button shows spinner, all edit buttons disabled                                                  | Save API in progress                  |
 
 #### Section Type Color Scheme
 
-| Type | Hex Color | Fill Opacity | Label | Description |
-|------|-----------|-------------|-------|-------------|
-| HEADER | `#3B82F6` (blue-500) | 25% (`40` hex) | `HEADER` | Book/page titles |
-| PARAGRAPH | `#22C55E` (green-500) | 25% | `PARAGRAPH` | Body text |
-| FOOTNOTE | `#F97316` (orange-500) | 25% | `FOOTNOTE` | Footnotes |
-| IMAGE_CAPTION | `#A855F7` (purple-500) | 25% | `IMAGE_CAPTION` | Image captions |
-| PAGE_NUMBER | `#6B7280` (gray-500) | 25% | `PAGE_NUMBER` | Page numbers |
-| OTHER | `#8B5CF6` (violet-500) | 25% | `OTHER` | Miscellaneous |
+| Type          | Hex Color              | Fill Opacity   | Label           | Description      |
+| ------------- | ---------------------- | -------------- | --------------- | ---------------- |
+| HEADER        | `#3B82F6` (blue-500)   | 25% (`40` hex) | `HEADER`        | Book/page titles |
+| PARAGRAPH     | `#22C55E` (green-500)  | 25%            | `PARAGRAPH`     | Body text        |
+| FOOTNOTE      | `#F97316` (orange-500) | 25%            | `FOOTNOTE`      | Footnotes        |
+| IMAGE_CAPTION | `#A855F7` (purple-500) | 25%            | `IMAGE_CAPTION` | Image captions   |
+| PAGE_NUMBER   | `#6B7280` (gray-500)   | 25%            | `PAGE_NUMBER`   | Page numbers     |
+| OTHER         | `#8B5CF6` (violet-500) | 25%            | `OTHER`         | Miscellaneous    |
 
 - Stroke color matches fill color
 - Stroke width: 1px (unselected), 2px white (selected)
@@ -169,31 +169,31 @@
 
 #### Toolbar Icons & Controls
 
-| # | Control | Type | Icon/Text | Behavior |
-|---|---------|------|-----------|----------|
-| 1 | Add Section | Toggle button | `[📐 Add Section]` / `[✕ Cancel Draw]` | Toggles draw mode. Active state: primary color background |
-| 2 | Delete | Action button | `[🗑 Delete]` | Deletes selected section. Disabled when no selection |
-| 3 | Type Selector | Dropdown | `[Type: PARAGRAPH ▼]` | Only visible when section selected. Changes section type |
-| 4 | Undo | Action button | `[↩]` | Reverses last action. Disabled when undo stack empty |
-| 5 | Redo | Action button | `[↪]` | Reapplies last undone action. Disabled when redo stack empty |
-| 6 | Detect Sections | Action button | `[✨ Detect Sections]` | Triggers ML-based section detection. Disabled during detection/saving |
-| 7 | Zoom Out | Action button | `[−]` | Decreases zoom by 10% (min 50%) |
-| 8 | Zoom Level | Label | `100%` | Displays current zoom percentage |
-| 9 | Zoom In | Action button | `[+]` | Increases zoom by 10% (max 300%) |
-| 10 | Confirm Sections | Primary action | `[✓ Confirm Sections]` | Saves all sections to API. Shows spinner while saving |
+| #   | Control          | Type           | Icon/Text                              | Behavior                                                              |
+| --- | ---------------- | -------------- | -------------------------------------- | --------------------------------------------------------------------- |
+| 1   | Add Section      | Toggle button  | `[📐 Add Section]` / `[✕ Cancel Draw]` | Toggles draw mode. Active state: primary color background             |
+| 2   | Delete           | Action button  | `[🗑 Delete]`                          | Deletes selected section. Disabled when no selection                  |
+| 3   | Type Selector    | Dropdown       | `[Type: PARAGRAPH ▼]`                  | Only visible when section selected. Changes section type              |
+| 4   | Undo             | Action button  | `[↩]`                                  | Reverses last action. Disabled when undo stack empty                  |
+| 5   | Redo             | Action button  | `[↪]`                                  | Reapplies last undone action. Disabled when redo stack empty          |
+| 6   | Detect Sections  | Action button  | `[✨ Detect Sections]`                 | Triggers ML-based section detection. Disabled during detection/saving |
+| 7   | Zoom Out         | Action button  | `[−]`                                  | Decreases zoom by 10% (min 50%)                                       |
+| 8   | Zoom Level       | Label          | `100%`                                 | Displays current zoom percentage                                      |
+| 9   | Zoom In          | Action button  | `[+]`                                  | Increases zoom by 10% (max 300%)                                      |
+| 10  | Confirm Sections | Primary action | `[✓ Confirm Sections]`                 | Saves all sections to API. Shows spinner while saving                 |
 
 #### Keyboard Shortcuts
 
-| Key | Context | Action |
-|-----|---------|--------|
-| `Delete` / `Backspace` | Canvas focused | Delete selected section |
-| `Ctrl+Z` | Anywhere | Undo |
-| `Ctrl+Shift+Z` / `Ctrl+Y` | Anywhere | Redo |
-| `Escape` | Canvas focused | Deselect current section / Cancel draw mode |
-| `+` / `=` | Canvas focused | Zoom in |
-| `-` | Canvas focused | Zoom out |
-| `Ctrl+S` | Anywhere | Save/confirm sections |
-| `D` | Canvas focused | Toggle draw mode |
+| Key                       | Context        | Action                                      |
+| ------------------------- | -------------- | ------------------------------------------- |
+| `Delete` / `Backspace`    | Canvas focused | Delete selected section                     |
+| `Ctrl+Z`                  | Anywhere       | Undo                                        |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Anywhere       | Redo                                        |
+| `Escape`                  | Canvas focused | Deselect current section / Cancel draw mode |
+| `+` / `=`                 | Canvas focused | Zoom in                                     |
+| `-`                       | Canvas focused | Zoom out                                    |
+| `Ctrl+S`                  | Anywhere       | Save/confirm sections                       |
+| `D`                       | Canvas focused | Toggle draw mode                            |
 
 - Keyboard shortcuts only fire when the canvas area is focused or no text input is active
 - Tooltips on toolbar buttons show the associated shortcut (e.g., "Delete (Delete)")
@@ -334,13 +334,13 @@ Section Types:
 
 ## Responsive Behavior — Page Editor
 
-| Element | Desktop (>1024px) | Tablet (768–1024px) | Mobile (<768px) |
-|---------|------------------|---------------------|-----------------|
-| Toolbar | Full horizontal bar with labels | Two-row toolbar, labels visible | Single row, icons only, overflow scroll |
-| Canvas | Full width available | Full width, slightly smaller | Full width, min-height 300px |
-| Zoom controls | Always visible | Always visible | Collapsed into expandable panel |
-| Type selector | Inline in toolbar | Inline in toolbar | Modal/dropdown overlay on tap |
-| Sidebar properties | Right sidebar (if applicable) | Bottom sheet | Bottom sheet |
+| Element            | Desktop (>1024px)               | Tablet (768–1024px)             | Mobile (<768px)                         |
+| ------------------ | ------------------------------- | ------------------------------- | --------------------------------------- |
+| Toolbar            | Full horizontal bar with labels | Two-row toolbar, labels visible | Single row, icons only, overflow scroll |
+| Canvas             | Full width available            | Full width, slightly smaller    | Full width, min-height 300px            |
+| Zoom controls      | Always visible                  | Always visible                  | Collapsed into expandable panel         |
+| Type selector      | Inline in toolbar               | Inline in toolbar               | Modal/dropdown overlay on tap           |
+| Sidebar properties | Right sidebar (if applicable)   | Bottom sheet                    | Bottom sheet                            |
 
 ## Accessibility
 

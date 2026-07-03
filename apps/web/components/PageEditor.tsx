@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react"
 import { Stage, Layer, Rect, Text, Transformer, Image as KonvaImage } from "react-konva"
+import { Plus, Trash2, Undo2, Redo2, ZoomIn, ZoomOut, Check, X, Sparkles } from "lucide-react"
 
 interface Section {
   id: string
@@ -16,6 +17,7 @@ interface PageEditorProps {
   pageImageUrl?: string
   initialSections?: Section[]
   onSave?: (sections: Section[]) => void
+  onDetectSections?: () => void
 }
 
 const SECTION_COLORS: Record<string, string> = {
@@ -36,23 +38,36 @@ const SECTION_TYPES = [
   "OTHER",
 ] as const
 
+const SECTION_LABELS: Record<string, string> = {
+  HEADER: "Header",
+  PARAGRAPH: "Paragraph",
+  FOOTNOTE: "Footnote",
+  IMAGE_CAPTION: "Image Caption",
+  PAGE_NUMBER: "Page Number",
+  OTHER: "Other",
+}
+
 const MAX_UNDO = 50
 
 export default function PageEditor({
   pageImageUrl,
   initialSections = [],
   onSave,
+  onDetectSections,
 }: PageEditorProps) {
   const [sections, setSections] = useState<Section[]>(initialSections)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState({ x: 0, y: 0 })
+  const [drawCurrent, setDrawCurrent] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
   const [imageSize, setImageSize] = useState({ width: 800, height: 600 })
   const [zoom, setZoom] = useState(1)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDetecting, setIsDetecting] = useState(false)
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const undoStackRef = useRef<Section[][]>([])
@@ -112,51 +127,57 @@ export default function PageEditor({
   }, [initialSections])
 
   useEffect(() => {
-    if (trRef.current && selectedId) {
-      const node = stageRef.current?.findOne(`#${selectedId}`)
+    if (!stageRef.current) return
+    if (selectedId) {
+      const node = stageRef.current.findOne(`#${selectedId}`)
       if (node) {
         trRef.current.nodes([node])
         trRef.current.getLayer()?.batchDraw()
         return
       }
     }
-    trRef.current?.nodes([])
-    trRef.current?.getLayer()?.batchDraw()
-  }, [selectedId])
+    trRef.current.nodes([])
+    trRef.current.getLayer()?.batchDraw()
+  }, [selectedId, sections])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleDragEnd = useCallback((id: string, e: any) => {
-    saveSnapshot()
-    setSections((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, x: e.target.x(), y: e.target.y() } : s,
-      ),
-    )
-  }, [saveSnapshot])
+  const handleDragEnd = useCallback(
+    (id: string, e: any) => {
+      saveSnapshot()
+      setSections((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, x: e.target.x(), y: e.target.y() } : s)),
+      )
+    },
+    [saveSnapshot],
+  )
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleTransformEnd = useCallback((id: string, e: any) => {
-    saveSnapshot()
-    const node = e.target
-    setSections((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? {
-              ...s,
-              x: node.x(),
-              y: node.y(),
-              width: node.width() * node.scaleX(),
-              height: node.height() * node.scaleY(),
-            }
-          : s,
-      ),
-    )
-  }, [saveSnapshot])
+  const handleTransformEnd = useCallback(
+    (id: string) => {
+      const node = stageRef.current?.findOne(`#${id}`)
+      if (!node) return
+      saveSnapshot()
+      const newX = node.x()
+      const newY = node.y()
+      const newWidth = node.width() * node.scaleX()
+      const newHeight = node.height() * node.scaleY()
+      node.scaleX(1)
+      node.scaleY(1)
+      setSections((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, x: newX, y: newY, width: newWidth, height: newHeight } : s,
+        ),
+      )
+    },
+    [saveSnapshot],
+  )
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleStageClick = (e: any) => {
     if (e.target === e.target.getStage()) {
       setSelectedId(null)
+      if (isDrawingRef.current) {
+        setIsDrawing(false)
+      }
     }
   }
 
@@ -164,18 +185,26 @@ export default function PageEditor({
   const handleMouseDown = (e: any) => {
     if (!isDrawingRef.current) return
     const pos = e.target.getStage()?.getPointerPosition()
-    if (pos) setDrawStart(pos)
+    if (!pos) return
+    setIsDragging(true)
+    setDrawStart(pos)
+    setDrawCurrent(pos)
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleMouseUp = (e: any) => {
-    if (!isDrawingRef.current) return
+  const handleMouseMove = (e: any) => {
+    if (!isDrawingRef.current || !isDragging) return
     const pos = e.target.getStage()?.getPointerPosition()
-    if (!pos) return
-    const x = Math.min(drawStart.x, pos.x)
-    const y = Math.min(drawStart.y, pos.y)
-    const w = Math.abs(pos.x - drawStart.x)
-    const h = Math.abs(pos.y - drawStart.y)
+    if (pos) setDrawCurrent(pos)
+  }
+
+  const handleMouseUp = () => {
+    if (!isDrawingRef.current || !isDragging) return
+    setIsDragging(false)
+    const x = Math.min(drawStart.x, drawCurrent.x)
+    const y = Math.min(drawStart.y, drawCurrent.y)
+    const w = Math.abs(drawCurrent.x - drawStart.x)
+    const h = Math.abs(drawCurrent.y - drawStart.y)
     if (w > 10 && h > 10) {
       saveSnapshot()
       const newSection: Section = {
@@ -218,6 +247,16 @@ export default function PageEditor({
     }
   }
 
+  const handleDetect = async () => {
+    if (!onDetectSections || isDetecting) return
+    setIsDetecting(true)
+    try {
+      await onDetectSections()
+    } finally {
+      setIsDetecting(false)
+    }
+  }
+
   const undo = useCallback(() => {
     const stack = undoStackRef.current
     if (stack.length === 0) return
@@ -240,6 +279,7 @@ export default function PageEditor({
 
   const toggleDrawMode = () => {
     setIsDrawing((d) => !d)
+    setSelectedId(null)
   }
 
   const handleKeyDown = useCallback(
@@ -324,13 +364,25 @@ export default function PageEditor({
     return a.x - b.x
   })
 
+  const drawRect =
+    isDrawing && isDragging
+      ? {
+          x: Math.min(drawStart.x, drawCurrent.x),
+          y: Math.min(drawStart.y, drawCurrent.y),
+          width: Math.abs(drawCurrent.x - drawStart.x),
+          height: Math.abs(drawCurrent.y - drawStart.y),
+        }
+      : null
+
   if (!pageImageUrl) {
     return (
       <div style={styles.container}>
         <div style={styles.canvasWrapper}>
           <div style={styles.noImage}>
             <span style={{ fontSize: 48, opacity: 0.4 }}>📄</span>
-            <p style={{ fontSize: 16, fontWeight: 600, color: "var(--muted)", margin: "8px 0 4px" }}>
+            <p
+              style={{ fontSize: 16, fontWeight: 600, color: "var(--muted)", margin: "8px 0 4px" }}
+            >
               No page image available
             </p>
             <p style={{ fontSize: 13, color: "var(--muted)" }}>
@@ -347,17 +399,68 @@ export default function PageEditor({
       <div style={styles.container}>
         <div style={styles.toolbar}>
           <div style={styles.toolbarLeft}>
-            <button disabled style={styles.toolBtn}>📐 Add Section</button>
-            <button disabled style={styles.toolBtn}>🗑 Delete</button>
+            <button disabled className="pe-icon-btn" style={styles.iconBtn} title="Add section (D)">
+              <span style={{ marginLeft: 0 }}>Add</span>
+            </button>
+            <button
+              disabled
+              className="pe-icon-btn"
+              style={styles.iconBtn}
+              title="Delete section (Delete)"
+            >
+              <Trash2 size={16} />
+            </button>
+            <div style={styles.separator} />
+            <button disabled className="pe-icon-btn" style={styles.iconBtn} title="Undo (Ctrl+Z)">
+              <Undo2 size={16} />
+            </button>
+            <button
+              disabled
+              className="pe-icon-btn"
+              style={styles.iconBtn}
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              <Redo2 size={16} />
+            </button>
+            <div style={styles.separator} />
+            <button
+              disabled
+              className="pe-icon-btn"
+              style={{ ...styles.iconBtn, color: "var(--primary)" }}
+              title="Auto-detect sections"
+            >
+              <Sparkles size={16} />
+              <span style={{ marginLeft: 6 }}>Detect</span>
+            </button>
           </div>
           <div style={styles.toolbarRight}>
-            <button disabled style={styles.zoomBtn}>−</button>
+            <button disabled className="pe-icon-btn" style={styles.iconBtn} title="Zoom Out (-)">
+              <ZoomOut size={16} />
+            </button>
             <span style={styles.zoomLabel}>100%</span>
-            <button disabled style={styles.zoomBtn}>+</button>
-            <button disabled style={{ ...styles.saveBtn, opacity: 0.5 }}>✓ Confirm Sections</button>
+            <button disabled className="pe-icon-btn" style={styles.iconBtn} title="Zoom In (+)">
+              <ZoomIn size={16} />
+            </button>
+            <button
+              disabled
+              className="pe-save-btn"
+              style={{ ...styles.saveBtn, opacity: 0.6 }}
+              title="Confirm sections (Ctrl+S)"
+            >
+              <Check size={16} />
+              <span style={{ marginLeft: 6 }}>Confirm</span>
+            </button>
           </div>
         </div>
-        <div ref={containerRef} style={{ ...styles.canvasWrapper, alignItems: "center", justifyContent: "center", minHeight: 400 }}>
+        <div
+          ref={containerRef}
+          style={{
+            ...styles.canvasWrapper,
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 400,
+          }}
+        >
           <div role="status" aria-live="polite" style={{ textAlign: "center" }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
             <p style={{ color: "var(--muted)", fontSize: 14 }}>Loading page image...</p>
@@ -372,24 +475,78 @@ export default function PageEditor({
       <div style={styles.container}>
         <div style={styles.toolbar}>
           <div style={styles.toolbarLeft}>
-            <button disabled style={styles.toolBtn}>📐 Add Section</button>
-            <button disabled style={styles.toolBtn}>🗑 Delete</button>
+            <button disabled className="pe-icon-btn" style={styles.iconBtn} title="Add section (D)">
+              <span style={{ marginLeft: 0 }}>Add</span>
+            </button>
+            <button
+              disabled
+              className="pe-icon-btn"
+              style={styles.iconBtn}
+              title="Delete section (Delete)"
+            >
+              <Trash2 size={16} />
+            </button>
+            <div style={styles.separator} />
+            <button disabled className="pe-icon-btn" style={styles.iconBtn} title="Undo (Ctrl+Z)">
+              <Undo2 size={16} />
+            </button>
+            <button
+              disabled
+              className="pe-icon-btn"
+              style={styles.iconBtn}
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              <Redo2 size={16} />
+            </button>
+            <div style={styles.separator} />
+            <button
+              disabled
+              className="pe-icon-btn"
+              style={{ ...styles.iconBtn, color: "var(--primary)" }}
+              title="Auto-detect sections"
+            >
+              <Sparkles size={16} />
+              <span style={{ marginLeft: 6 }}>Detect</span>
+            </button>
           </div>
           <div style={styles.toolbarRight}>
-            <button disabled style={styles.zoomBtn}>−</button>
+            <button disabled className="pe-icon-btn" style={styles.iconBtn} title="Zoom Out (-)">
+              <ZoomOut size={16} />
+            </button>
             <span style={styles.zoomLabel}>100%</span>
-            <button disabled style={styles.zoomBtn}>+</button>
-            <button disabled style={{ ...styles.saveBtn, opacity: 0.5 }}>✓ Confirm Sections</button>
+            <button disabled className="pe-icon-btn" style={styles.iconBtn} title="Zoom In (+)">
+              <ZoomIn size={16} />
+            </button>
+            <button
+              disabled
+              className="pe-save-btn"
+              style={{ ...styles.saveBtn, opacity: 0.6 }}
+              title="Confirm sections (Ctrl+S)"
+            >
+              <Check size={16} />
+              <span style={{ marginLeft: 6 }}>Confirm</span>
+            </button>
           </div>
         </div>
-        <div ref={containerRef} style={{ ...styles.canvasWrapper, alignItems: "center", justifyContent: "center", minHeight: 400 }}>
+        <div
+          ref={containerRef}
+          style={{
+            ...styles.canvasWrapper,
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 400,
+          }}
+        >
           <div role="alert" style={{ textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.5 }}>⚠️</div>
             <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 12 }}>
               Failed to load page image
             </p>
-            <button onClick={loadImage} style={{ ...styles.toolBtn, borderColor: "var(--primary)", color: "var(--primary)" }}>
-              🔄 Retry
+            <button
+              onClick={loadImage}
+              style={{ ...styles.toolBtn, borderColor: "var(--primary)", color: "var(--primary)" }}
+            >
+              Retry
             </button>
           </div>
         </div>
@@ -397,72 +554,112 @@ export default function PageEditor({
     )
   }
 
-  const currentImage = imgRef.current // eslint-disable-line react-hooks/refs
-
+  // eslint-disable-next-line react-hooks/refs
+  const currentImage = imgRef.current
   return (
     <div style={styles.container}>
+      <style>{`
+        .pe-icon-btn:hover:not(:disabled) {
+          background: var(--accent) !important;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+        .pe-icon-btn:active:not(:disabled) {
+          transform: scale(0.96);
+        }
+        .pe-icon-btn[aria-pressed="true"]:hover:not(:disabled) {
+          filter: brightness(1.1) !important;
+        }
+        .pe-save-btn:hover:not(:disabled) {
+          filter: brightness(1.08);
+        }
+        .pe-save-btn:active:not(:disabled) {
+          transform: scale(0.96);
+        }
+      `}</style>
       <div style={styles.toolbar} role="toolbar" aria-label="Section editing tools">
         <div style={styles.toolbarLeft}>
           <button
             onClick={toggleDrawMode}
             disabled={isSaving}
+            className="pe-icon-btn"
             style={{
-              ...styles.toolBtn,
+              ...styles.iconBtn,
               background: isDrawing ? "var(--primary)" : "var(--surface)",
               color: isDrawing ? "#fff" : "var(--foreground)",
               opacity: isSaving ? 0.5 : 1,
             }}
             aria-pressed={isDrawing}
-            title="Add Section (D)"
+            title={isDrawing ? "Cancel drawing (D)" : "Add section (D)"}
           >
-            {isDrawing ? "✕ Cancel Draw" : "📐 Add Section"}
+            {isDrawing ? <X size={16} /> : <Plus size={16} />}
+            <span style={{ marginLeft: 6 }}>{isDrawing ? "Cancel" : "Add"}</span>
           </button>
           <button
             onClick={deleteSelected}
             disabled={!selectedId || isSaving}
+            className="pe-icon-btn"
             style={{
-              ...styles.toolBtn,
-              opacity: !selectedId || isSaving ? 0.5 : 1,
+              ...styles.iconBtn,
+              opacity: !selectedId || isSaving ? 0.4 : 1,
+              cursor: !selectedId || isSaving ? "not-allowed" : "pointer",
             }}
-            title="Delete (Delete)"
+            title="Delete section (Delete)"
           >
-            🗑 Delete
+            <Trash2 size={16} />
           </button>
+          <div style={styles.separator} />
           <button
             onClick={undo}
             disabled={!canUndo || isSaving}
+            className="pe-icon-btn"
             style={{
-              ...styles.toolBtn,
-              opacity: !canUndo || isSaving ? 0.5 : 1,
+              ...styles.iconBtn,
+              opacity: !canUndo || isSaving ? 0.4 : 1,
+              cursor: !canUndo || isSaving ? "not-allowed" : "pointer",
             }}
             title="Undo (Ctrl+Z)"
           >
-            ↩ Undo
+            <Undo2 size={16} />
           </button>
           <button
             onClick={redo}
             disabled={!canRedo || isSaving}
+            className="pe-icon-btn"
             style={{
-              ...styles.toolBtn,
-              opacity: !canRedo || isSaving ? 0.5 : 1,
+              ...styles.iconBtn,
+              opacity: !canRedo || isSaving ? 0.4 : 1,
+              cursor: !canRedo || isSaving ? "not-allowed" : "pointer",
             }}
             title="Redo (Ctrl+Shift+Z)"
           >
-            ↪ Redo
+            <Redo2 size={16} />
           </button>
+          <button
+            onClick={handleDetect}
+            disabled={isDetecting || isSaving}
+            className="pe-icon-btn"
+            style={{
+              ...styles.iconBtn,
+              opacity: isDetecting || isSaving ? 0.6 : 1,
+              cursor: isDetecting || isSaving ? "not-allowed" : "pointer",
+              color: "var(--primary)",
+            }}
+            title="Auto-detect sections"
+          >
+            <Sparkles size={16} />
+            <span style={{ marginLeft: 6 }}>{isDetecting ? "Detecting..." : "Detect"}</span>
+          </button>
+          <div style={styles.separator} />
           {selectedId && (
             <select
               value={sections.find((s) => s.id === selectedId)?.type ?? "PARAGRAPH"}
               onChange={(e) => changeType(selectedId, e.target.value as Section["type"])}
               disabled={isSaving}
-              style={{
-                ...styles.typeSelect,
-                opacity: isSaving ? 0.5 : 1,
-              }}
+              style={styles.typeSelect}
             >
               {SECTION_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {SECTION_LABELS[t]}
                 </option>
               ))}
             </select>
@@ -472,13 +669,15 @@ export default function PageEditor({
           <button
             onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}
             disabled={zoom <= 0.5}
+            className="pe-icon-btn"
             style={{
-              ...styles.zoomBtn,
-              opacity: zoom <= 0.5 ? 0.5 : 1,
+              ...styles.iconBtn,
+              opacity: zoom <= 0.5 ? 0.4 : 1,
+              cursor: zoom <= 0.5 ? "not-allowed" : "pointer",
             }}
             title="Zoom Out (-)"
           >
-            −
+            <ZoomOut size={16} />
           </button>
           <span style={styles.zoomLabel} aria-live="polite">
             {Math.round(zoom * 100)}%
@@ -486,24 +685,29 @@ export default function PageEditor({
           <button
             onClick={() => setZoom((z) => Math.min(3, z + 0.1))}
             disabled={zoom >= 3}
+            className="pe-icon-btn"
             style={{
-              ...styles.zoomBtn,
-              opacity: zoom >= 3 ? 0.5 : 1,
+              ...styles.iconBtn,
+              opacity: zoom >= 3 ? 0.4 : 1,
+              cursor: zoom >= 3 ? "not-allowed" : "pointer",
             }}
             title="Zoom In (+)"
           >
-            +
+            <ZoomIn size={16} />
           </button>
           <button
             onClick={handleSave}
             disabled={sections.length === 0 || isSaving}
+            className="pe-save-btn"
             style={{
               ...styles.saveBtn,
-              opacity: sections.length === 0 || isSaving ? 0.7 : 1,
+              opacity: sections.length === 0 || isSaving ? 0.6 : 1,
+              cursor: sections.length === 0 || isSaving ? "not-allowed" : "pointer",
             }}
-            title="Confirm Sections (Ctrl+S)"
+            title="Confirm sections (Ctrl+S)"
           >
-            {isSaving ? "⏳" : "✓"} Confirm Sections
+            <Check size={16} />
+            <span style={{ marginLeft: 6 }}>{isSaving ? "Saving..." : "Confirm"}</span>
           </button>
         </div>
       </div>
@@ -517,6 +721,7 @@ export default function PageEditor({
             scaleX={zoom}
             scaleY={zoom}
             onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onClick={handleStageClick}
             style={{ background: "#f0f0f0", borderRadius: 8 }}
@@ -537,6 +742,7 @@ export default function PageEditor({
                 <Rect
                   key={section.id}
                   id={section.id}
+                  name="section"
                   x={section.x}
                   y={section.y}
                   width={section.width}
@@ -548,9 +754,21 @@ export default function PageEditor({
                   onClick={() => setSelectedId(section.id)}
                   onTap={() => setSelectedId(section.id)}
                   onDragEnd={(e) => handleDragEnd(section.id, e)}
-                  onTransformEnd={(e) => handleTransformEnd(section.id, e)}
+                  onTransformEnd={() => handleTransformEnd(section.id)}
                 />
               ))}
+              {drawRect && (
+                <Rect
+                  x={drawRect.x}
+                  y={drawRect.y}
+                  width={drawRect.width}
+                  height={drawRect.height}
+                  fill={"#A855F7" + "30"}
+                  stroke="#A855F7"
+                  strokeWidth={1}
+                  dash={[5, 5]}
+                />
+              )}
               <Transformer
                 ref={trRef}
                 boundBoxFunc={(oldBox, newBox) =>
@@ -564,7 +782,7 @@ export default function PageEditor({
                   key={`label-${section.id}`}
                   x={section.x + 4}
                   y={section.y + 4}
-                  text={section.type}
+                  text={SECTION_LABELS[section.type] ?? section.type}
                   fontSize={11}
                   fill={SECTION_COLORS[section.type]}
                   fontStyle="bold"
@@ -573,7 +791,7 @@ export default function PageEditor({
             </Layer>
           </Stage>
         )}
-        {imageLoaded && sections.length === 0 && (
+        {imageLoaded && sections.length === 0 && !isDrawing && (
           <div
             style={{
               position: "absolute",
@@ -588,7 +806,25 @@ export default function PageEditor({
               pointerEvents: "none",
             }}
           >
-            No sections yet. Click &quot;Detect Sections&quot; or draw manually.
+            No sections yet. Click &quot;Add&quot; to draw sections.
+          </div>
+        )}
+        {isDrawing && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 16,
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "rgba(0,0,0,0.6)",
+              color: "#fff",
+              padding: "8px 16px",
+              borderRadius: 8,
+              fontSize: 13,
+              pointerEvents: "none",
+            }}
+          >
+            Click and drag on the page to draw a section
           </div>
         )}
       </div>
@@ -610,6 +846,10 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid var(--border)",
     borderRadius: 8,
     background: "var(--surface)",
+    position: "sticky",
+    top: 56,
+    zIndex: 10,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
   },
   toolbarLeft: {
     display: "flex",
@@ -621,41 +861,49 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     alignItems: "center",
   },
-  toolBtn: {
-    padding: "6px 12px",
+  iconBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 32,
+    padding: "0 10px",
     border: "1px solid var(--border)",
     borderRadius: 6,
     fontSize: 13,
     cursor: "pointer",
     background: "var(--surface)",
+    color: "var(--foreground)",
+    fontFamily: "inherit",
+    transition: "background 0.15s, box-shadow 0.15s",
+  },
+  separator: {
+    width: 1,
+    height: 20,
+    background: "var(--border)",
+    margin: "0 4px",
   },
   typeSelect: {
-    padding: "6px 8px",
+    padding: "4px 8px",
     border: "1px solid var(--border)",
     borderRadius: 6,
     fontSize: 13,
     background: "var(--background)",
     color: "var(--foreground)",
-  },
-  zoomBtn: {
-    width: 28,
-    height: 28,
-    border: "1px solid var(--border)",
-    borderRadius: 6,
-    fontSize: 16,
-    cursor: "pointer",
-    background: "var(--background)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    fontFamily: "inherit",
+    height: 32,
   },
   zoomLabel: {
     fontSize: 13,
     minWidth: 40,
     textAlign: "center",
+    color: "var(--foreground)",
   },
   saveBtn: {
-    padding: "6px 16px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 32,
+    padding: "0 14px",
     border: "none",
     borderRadius: 6,
     background: "var(--primary)",
@@ -663,6 +911,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
+    fontFamily: "inherit",
+    transition: "opacity 0.15s",
   },
   canvasWrapper: {
     border: "1px solid var(--border)",
