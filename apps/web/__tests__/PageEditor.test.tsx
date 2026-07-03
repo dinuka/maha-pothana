@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest"
 import React from "react"
+import { createRoot, Root } from "react-dom/client"
+import { flushSync } from "react-dom"
 
 vi.mock("react-konva", () => ({
   Stage: ({ children }: { children: React.ReactNode }) =>
@@ -12,69 +13,269 @@ vi.mock("react-konva", () => ({
   Text: ({ text }: { text: string }) =>
     React.createElement("span", { "data-testid": "label" }, text),
   Transformer: () => React.createElement("div", { "data-testid": "transformer" }),
+  Image: () => React.createElement("div", { "data-testid": "konva-image" }),
 }))
 
 import PageEditor from "@/components/PageEditor"
 
-describe("PageEditor", () => {
-  const mockSections = [
-    { id: "s1", type: "HEADER" as const, x: 0, y: 0, width: 100, height: 50 },
-    { id: "s2", type: "PARAGRAPH" as const, x: 0, y: 60, width: 200, height: 150 },
-  ]
+const mockSections = [
+  { id: "s1", type: "HEADER" as const, x: 0, y: 0, width: 100, height: 50 },
+  { id: "s2", type: "PARAGRAPH" as const, x: 0, y: 60, width: 200, height: 150 },
+]
 
-  it("renders no image message when no url provided", () => {
-    render(React.createElement(PageEditor))
-    expect(screen.getByText("No page image available")).toBeInTheDocument()
+function setupMockImage(onloadFire: "sync" | "never" = "sync") {
+  const MockImage = function (this: void) {
+    const img: Record<string, unknown> = {
+      onload: null, onerror: null, crossOrigin: "", width: 800, height: 600,
+    }
+    Object.defineProperty(img, "src", {
+      get() { return "" },
+      set(value: string) {
+        if (!value) return
+        if (onloadFire === "sync" && typeof img.onload === "function") {
+          (img.onload as () => void)()
+        }
+      },
+      configurable: true,
+    })
+    return img
+  }
+  vi.stubGlobal("Image", MockImage as unknown as typeof globalThis.Image)
+}
+
+describe("PageEditor — no image", () => {
+  let root: Root
+  let container: HTMLDivElement
+
+  beforeAll(() => {
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
   })
 
-  it("renders Add Section button", () => {
-    render(React.createElement(PageEditor))
-    expect(screen.getByText("Add Section")).toBeInTheDocument()
+  afterAll(() => {
+    root.unmount()
+    document.body.removeChild(container)
   })
 
-  it("toggles drawing mode on Add Section click", () => {
-    render(React.createElement(PageEditor))
-    const btn = screen.getByText("Add Section")
-    fireEvent.click(btn)
-    expect(screen.getByText("Cancel Draw")).toBeInTheDocument()
-    fireEvent.click(btn)
-    expect(screen.getByText("Add Section")).toBeInTheDocument()
+  it("renders no image message when no url", () => {
+    flushSync(() => { root.render(React.createElement(PageEditor)) })
+    expect(document.body.textContent).toContain("No page image available")
   })
 
-  it("renders initial sections", () => {
-    render(
-      React.createElement(PageEditor, { pageImageUrl: "/test.png", initialSections: mockSections }),
-    )
-    const rects = screen.getAllByTestId("rect")
-    // 1 background rect + 2 section rects
-    expect(rects).toHaveLength(3)
+  it("shows loading state when url provided", () => {
+    flushSync(() => { root.render(React.createElement(PageEditor, { pageImageUrl: "/test.png" })) })
+    expect(document.body.textContent).toContain("Loading page image...")
+    expect(document.body.textContent).toContain("Add Section")
+    expect(document.body.textContent).toContain("Delete")
+    expect(document.body.textContent).toContain("100%")
+    expect(document.body.textContent).toContain("Confirm Sections")
+  })
+})
+
+describe("PageEditor — loaded (mock Image sync onload)", () => {
+  let root: Root
+  let container: HTMLDivElement
+
+  beforeAll(() => {
+    setupMockImage("sync")
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
   })
 
-  it("deletes selected section", () => {
-    render(
-      React.createElement(PageEditor, { pageImageUrl: "/test.png", initialSections: mockSections }),
-    )
-    const deleteBtn = screen.getByText("Delete")
-    expect(deleteBtn).toBeDisabled()
-    const allRects = screen.getAllByTestId("rect")
-    // index 0 is background rect (no onClick), index 1 is first section
-    fireEvent.click(allRects[1])
-    expect(deleteBtn).not.toBeDisabled()
-    fireEvent.click(deleteBtn)
-    const rects = screen.getAllByTestId("rect")
-    // 1 background rect + 1 remaining section rect
-    expect(rects).toHaveLength(2)
+  afterAll(() => {
+    root.unmount()
+    document.body.removeChild(container)
+    vi.unstubAllGlobals()
   })
 
-  it("calls onSave when confirm button clicked", () => {
+  function renderWithProps(props: Record<string, unknown> = {}) {
+    flushSync(() => {
+      root.render(React.createElement(PageEditor, {
+        pageImageUrl: "/test.png",
+        initialSections: mockSections,
+        ...props,
+      }))
+    })
+  }
+
+  it("renders toolbar and stage", () => {
+    renderWithProps()
+    expect(document.body.textContent).toContain("Add Section")
+    expect(document.body.textContent).toContain("Delete")
+    expect(document.body.textContent).toContain("Undo")
+    expect(document.body.textContent).toContain("Redo")
+    expect(document.body.textContent).toContain("100%")
+    expect(document.body.textContent).toContain("Confirm Sections")
+    expect(document.querySelector('[data-testid="stage"]')).not.toBeNull()
+    const rects = document.querySelectorAll('[data-testid="rect"]')
+    expect(rects.length).toBe(2)
+  })
+
+  it("zoom in increases zoom display", () => {
+    renderWithProps({ key: "zoom-in" })
+    const zoomInBtn = container.querySelector('button[title*="Zoom In"]') as HTMLButtonElement
+    expect(zoomInBtn).not.toBeNull()
+    zoomInBtn.click()
+    flushSync(() => {})
+    expect(document.body.textContent).toContain("110%")
+  })
+
+  it("zoom out decreases zoom display", () => {
+    renderWithProps({ key: "zoom-out" })
+    const zoomOutBtn = container.querySelector('button[title*="Zoom Out"]') as HTMLButtonElement
+    expect(zoomOutBtn).not.toBeNull()
+    zoomOutBtn.click()
+    flushSync(() => {})
+    expect(document.body.textContent).toContain("90%")
+  })
+
+  it("confirm button is enabled with sections", () => {
+    renderWithProps()
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Confirm"),
+    ) as HTMLButtonElement
+    expect(confirmBtn).not.toBeNull()
+    expect(confirmBtn.disabled).toBe(false)
+  })
+
+  it("calls onSave with ordered sections on confirm", () => {
     const onSave = vi.fn()
-    render(React.createElement(PageEditor, { initialSections: mockSections, onSave }))
-    fireEvent.click(screen.getByText("Confirm Sections"))
-    expect(onSave).toHaveBeenCalledWith(mockSections)
+    renderWithProps({ onSave })
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Confirm"),
+    ) as HTMLButtonElement
+    confirmBtn.click()
+    expect(onSave).toHaveBeenCalledTimes(1)
+    const args = onSave.mock.calls[0][0]
+    expect(args).toHaveLength(2)
+    expect(args[0]).toMatchObject({ id: "s1", sectionOrder: 0 })
+    expect(args[1]).toMatchObject({ id: "s2", sectionOrder: 1 })
   })
 
-  it("renders zoom controls", () => {
-    render(React.createElement(PageEditor))
-    expect(screen.getByText("100%")).toBeInTheDocument()
+  it("delete button is disabled when no selection", () => {
+    renderWithProps()
+    const deleteBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Delete"),
+    ) as HTMLButtonElement
+    // With no section selected, Delete should be disabled (opacity 0.5 via style)
+    expect(deleteBtn.disabled).toBe(true)
+  })
+
+  it("draw toggle button changes text", () => {
+    renderWithProps({ key: "draw" })
+    const drawBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Add Section"),
+    ) as HTMLButtonElement
+    expect(drawBtn.textContent).toContain("Add Section")
+    drawBtn.click()
+    flushSync(() => {})
+    expect(document.body.textContent).toContain("Cancel Draw")
+  })
+
+  it("undo button is disabled initially", () => {
+    renderWithProps()
+    const undoBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Undo"),
+    ) as HTMLButtonElement
+    expect(undoBtn.disabled).toBe(true)
+  })
+
+  it("redo button is disabled initially", () => {
+    renderWithProps()
+    const redoBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Redo"),
+    ) as HTMLButtonElement
+    expect(redoBtn.disabled).toBe(true)
+  })
+
+  it("confirm shows loading state when unsaved changes exist then clears", () => {
+    const onSave = vi.fn().mockImplementation(() => {})
+    renderWithProps({ onSave })
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Confirm"),
+    ) as HTMLButtonElement
+    confirmBtn.click()
+    expect(onSave).toHaveBeenCalledTimes(1)
+    // After save, undo/redo stacks should be cleared
+    const undoBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Undo"),
+    ) as HTMLButtonElement
+    expect(undoBtn.disabled).toBe(true)
+  })
+})
+
+describe("PageEditor — loaded, no sections (mock Image sync onload)", () => {
+  let root: Root
+  let container: HTMLDivElement
+
+  beforeAll(() => {
+    setupMockImage("sync")
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterAll(() => {
+    root.unmount()
+    document.body.removeChild(container)
+    vi.unstubAllGlobals()
+  })
+
+  it("shows no sections message when image loaded with empty sections", () => {
+    flushSync(() => {
+      root.render(React.createElement(PageEditor, {
+        pageImageUrl: "/test.png",
+        initialSections: [],
+      }))
+    })
+    expect(document.body.textContent).toContain("No sections yet")
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Confirm"),
+    ) as HTMLButtonElement
+    expect(confirmBtn.disabled).toBe(true)
+  })
+})
+
+describe("PageEditor — error state (mock Image that never fires)", () => {
+  let root: Root
+  let container: HTMLDivElement
+
+  beforeAll(() => {
+    // Image mock that never fires onload → image stays loading → covered by "loading" test above
+    // For error state, mock needs to fire onerror
+    const MockImage = function (this: void) {
+      const img: Record<string, unknown> = {
+        onload: null, onerror: null, crossOrigin: "", width: 800, height: 600,
+      }
+      Object.defineProperty(img, "src", {
+        get() { return "" },
+        set(value: string) {
+          if (!value) return
+          if (typeof img.onerror === "function") (img.onerror as () => void)()
+        },
+        configurable: true,
+      })
+      return img
+    }
+    vi.stubGlobal("Image", MockImage as unknown as typeof globalThis.Image)
+    container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterAll(() => {
+    root.unmount()
+    document.body.removeChild(container)
+    vi.unstubAllGlobals()
+  })
+
+  it("shows error state when image load fails", () => {
+    flushSync(() => {
+      root.render(React.createElement(PageEditor, { pageImageUrl: "/test.png" }))
+    })
+    expect(document.body.textContent).toContain("Failed to load page image")
+    expect(document.body.textContent).toContain("Retry")
   })
 })

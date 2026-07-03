@@ -60,13 +60,17 @@ async def get_page(book_id: str, page_num: int, db: AsyncIOMotorDatabase = Depen
     sections_cursor = db.sections.find({"page.id": str(page["_id"])}).sort("sectionOrder", 1)
     sections = await sections_cursor.to_list(length=200)
 
+    image_key = page.get("imageKey")
+    image_url = await get_presigned_url(image_key) if image_key else None
+
     return {
         "page": PageResponse(
             id=str(page["_id"]),
             book=BookRef(id=page["book"]["id"]),
             pageNumber=page["pageNumber"],
             originalPageNumber=page.get("originalPageNumber", str(page["pageNumber"])),
-            imageKey=page.get("imageKey"),
+            imageKey=image_key,
+            imageUrl=image_url,
             width=page.get("width", 0),
             height=page.get("height", 0),
             status=page.get("status", "PENDING"),
@@ -107,10 +111,12 @@ async def save_sections(page_id: str, body: list[dict], db: AsyncIOMotorDatabase
 
     await db.sections.delete_many({"page.id": page_id})
 
-    for sec in body:
+    sorted_sections = sorted(body, key=lambda s: (s.get("y", 0), s.get("x", 0)))
+
+    for i, sec in enumerate(sorted_sections):
         await db.sections.insert_one({
             "page": {"id": page_id},
-            "sectionOrder": sec.get("sectionOrder", 0),
+            "sectionOrder": sec.get("sectionOrder", i),
             "type": sec.get("type", "PARAGRAPH"),
             "x": sec.get("x", 0),
             "y": sec.get("y", 0),

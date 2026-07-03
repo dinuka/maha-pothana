@@ -1,6 +1,6 @@
 import { apiFetch } from "@/lib/apiClient"
 import Link from "next/link"
-import PageEditor from "@/components/PageEditor"
+import PageEditorWrapper from "./PageEditorWrapper"
 
 interface Section {
   id: string
@@ -11,17 +11,22 @@ interface Section {
   height: number
 }
 
-interface PageDetail {
+interface PageData {
   id: string
   pageNumber: number
   imageKey: string
+  imageUrl?: string
   status: string
+}
+
+interface PageDetail {
+  page: PageData
   sections: Section[]
 }
 
 async function getPage(bookId: string, pageNum: string): Promise<PageDetail | null> {
   try {
-    const res = await apiFetch(`/api/books/${bookId}/pages/${pageNum}`, { cache: "no-store" })
+    const res = await apiFetch(`/api/books/${bookId}/pages/${pageNum}`, { cache: "no-store" });
     if (res.ok) return res.json()
   } catch {
     /* noop */
@@ -44,27 +49,20 @@ export default async function PageEditorPage({
           ← Back to book
         </Link>
         <h1 style={styles.title}>Page {pageNum}</h1>
-        {page && <span style={styles.badge}>{page.status}</span>}
+        {page && <span style={styles.badge}>{page.page.status}</span>}
       </div>
 
-      <PageEditor
-        pageImageUrl={page?.imageKey}
+      <PageEditorWrapper
+        pageId={page?.page.id ?? ""}
+        pageImageUrl={page?.page.imageUrl}
         initialSections={page?.sections ?? []}
-        onSave={async (sections) => {
-          "use server"
-          await apiFetch(`/api/pages/${page?.id}/sections`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sections }),
-          })
-        }}
       />
     </div>
   )
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { padding: 32, maxWidth: 1200, margin: "0 auto" },
+  page: { padding: 32, maxWidth: 1200, margin: "0 auto", overflowX: "hidden" },
   header: {
     display: "flex",
     alignItems: "center",

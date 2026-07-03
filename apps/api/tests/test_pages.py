@@ -103,13 +103,30 @@ async def test_get_page_with_sections(client, mock_db, sample_page, sample_secti
     mock_db.pages.find_one = AsyncMock(return_value=sample_page)
     mock_db.sections.find.return_value.to_list = AsyncMock(return_value=[sample_section])
 
-    response = await client.get(f'/api/books/{sample_page["book"]["id"]}/pages/1')
+    with patch("app.api.pages.get_presigned_url", new_callable=AsyncMock, return_value="http://minio/presigned/test.png"):
+        response = await client.get(f'/api/books/{sample_page["book"]["id"]}/pages/1')
 
     assert response.status_code == 200
     data = response.json()
     assert data["page"]["pageNumber"] == 1
+    assert data["page"]["imageUrl"] == "http://minio/presigned/test.png"
+    assert data["page"]["imageKey"] == "books/user123/pages/1.png"
     assert len(data["sections"]) == 1
     assert data["sections"][0]["originalText"] == "Original Sinhala text"
+
+
+@pytest.mark.asyncio
+async def test_get_page_image_url_null_when_no_image_key(client, mock_db, sample_page):
+    no_key_page = {**sample_page, "imageKey": None}
+    mock_db.pages.find_one = AsyncMock(return_value=no_key_page)
+    mock_db.sections.find.return_value.to_list = AsyncMock(return_value=[])
+
+    response = await client.get(f'/api/books/{sample_page["book"]["id"]}/pages/1')
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["page"]["imageUrl"] is None
+    assert data["page"]["imageKey"] is None
 
 
 @pytest.mark.asyncio
@@ -161,3 +178,33 @@ async def test_save_sections(client, mock_db, sample_page):
     assert response.json()["status"] == "SECTIONS_CONFIRMED"
     mock_db.sections.delete_many.assert_awaited_once_with({"page.id": sample_page["_id"]})
     mock_crop.delay.assert_called_once_with(sample_page["_id"])
+
+
+@pytest.mark.asyncio
+async def test_save_sections_recalculates_order(client, mock_db, sample_page):
+    mock_db.pages.find_one = AsyncMock(return_value=sample_page)
+    mock_db.sections.delete_many = AsyncMock()
+    mock_db.sections.insert_one = AsyncMock()
+    mock_db.pages.update_one = AsyncMock()
+
+    sections = [
+        {"id": "s3", "type": "FOOTNOTE", "x": 10, "y": 500, "width": 200, "height": 50},
+        {"id": "s1", "type": "HEADER", "x": 10, "y": 10, "width": 400, "height": 60},
+        {"id": "s2", "type": "PARAGRAPH", "x": 10, "y": 100, "width": 400, "height": 300},
+    ]
+
+    with patch("app.api.pages.crop_sections") as mock_crop:
+        response = await client.put(
+            f'/api/pages/{sample_page["_id"]}/sections',
+            json=sections,
+        )
+
+    assert response.status_code == 200
+    insert_calls = mock_db.sections.insert_one.call_args_list
+    assert len(insert_calls) == 3
+    first_inserted = insert_calls[0][0][0]
+    second_inserted = insert_calls[1][0][0]
+    assert first_inserted["sectionOrder"] == 0
+    assert first_inserted["type"] == "HEADER"
+    assert second_inserted["sectionOrder"] == 1
+    assert second_inserted["type"] == "PARAGRAPH"

@@ -10,6 +10,7 @@ class PageResponse(BaseModel):
     pageNumber: int
     originalPageNumber: str
     imageKey: str | None = None
+    imageUrl: str | None = None
     width: int = 0
     height: int = 0
     status: str = "PENDING"

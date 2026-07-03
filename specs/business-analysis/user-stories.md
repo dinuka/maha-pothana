@@ -77,48 +77,84 @@
 - Processing happens asynchronously (Celery worker)
 - Editor sees processing status per page
 
-### US-3.2 Section Detection
+### US-3.2 View Page Image on Canvas
 
 **As an** editor
-**I want to** view detected sections on a page
-**So that** I can organize them for translation.
+**I want to** see the actual page image rendered on the Konva canvas
+**So that** I can visually identify sections overlaid on the real page content.
 
 **Acceptance Criteria:**
 
-- Page image displayed with overlaid colored rectangles for each detected section
-- Section types identified: header, paragraph, footnote, image caption, page number
-- Each rectangle labeled with section type
-- Editor can click a rectangle to see its properties
-- Detected sections are non-destructive — can be modified before confirming
+- The page image loads from a presigned S3 URL (not a raw S3 key)
+- The image is rendered as the canvas background using `fillPatternImage` or `Konva.Image`
+- Image dimensions determine the initial canvas size (capped to container width, maintaining aspect ratio)
+- A loading spinner is shown while the image is being fetched
+- If the image fails to load, an error state with a retry button is displayed
+- When no page image URL is provided, the fallback "No page image available" message is shown
 
-### US-3.3 Edit Sections
+### US-3.3 Section Detection & Display
 
 **As an** editor
-**I want to** modify detected sections (drag, resize, delete, add)
-**So that** the section layout is accurate before translation.
+**I want to** trigger automatic section detection on a page and view results
+**So that** I can see ML-detected sections as colored rectangles overlaid on the page image.
 
 **Acceptance Criteria:**
 
-- Click and drag to move a section rectangle
-- Drag corner/edge handles to resize a section
-- Delete button removes a section (with undo)
-- Draw tool to create a new section rectangle
-- Each section has a type selector (header/paragraph/footnote/etc)
-- Changes are saved locally until "Confirm" is pressed
+- A "Detect Sections" button triggers the detection API (`POST /api/pages/{pageId}/sections/detect`)
+- A processing indicator is shown while detection runs
+- On completion, detected sections appear as colored rectangles overlaid on the page image
+- Each section type is color-coded: HEADER (blue), PARAGRAPH (green), FOOTNOTE (orange), IMAGE_CAPTION (purple), PAGE_NUMBER (gray), OTHER (violet)
+- Each rectangle is labeled with its section type text in the top-left corner
+- Clicking a rectangle selects it and shows a Transformer with resize handles
+- Detected sections are non-destructive — all modifications happen locally until confirmed
 
-### US-3.4 Confirm Sections
+### US-3.4 Edit Sections (Canvas Manipulation)
 
 **As an** editor
-**I want to** confirm and export the finalized sections
-**So that** they become available for translation.
+**I want to** modify detected sections by dragging, resizing, deleting, or adding new ones
+**So that** the section layout accurately reflects the page structure before translation.
 
 **Acceptance Criteria:**
 
-- "Confirm" button saves all section positions and types to DB
-- Each section gets a unique ID
-- Section data includes: position (x, y, width, height), type, page number, order
+- Click and drag to move a selected section rectangle freely within the canvas
+- Drag corner/edge transform handles to resize a section
+- Minimum section size constraint: width >= 10px, height >= 10px
+- A "Delete" button (enabled only when a section is selected) removes the section from the local state
+- An "Add Section" toggle button enters draw mode; click-drag on canvas draws a new rectangle (min 10x10px)
+- A type selector dropdown allows changing the section type of the currently selected section
+- Changes are accumulated locally until "Confirm Sections" is pressed
+- Zoom controls (+/- buttons and percentage display) scale the canvas view without affecting stored coordinates
+- Undo/Redo support for section modifications during the editing session
+
+### US-3.5 Confirm & Save Sections
+
+**As an** editor
+**I want to** confirm and save the finalized sections to the database
+**So that** they become available for cropping and translation.
+
+**Acceptance Criteria:**
+
+- "Confirm Sections" button saves all section positions, sizes, types, and order to the API
+- The API payload format matches the backend expectation (raw array of section objects, not wrapped)
+- On success, page status transitions to SECTIONS_CONFIRMED on the backend
+- A success toast/notification is displayed
+- On failure, an error message is shown with the option to retry
 - After confirmation, sections appear in the translation pool
-- Confirmed sections can still be edited by re-opening the page
+- Confirmed sections can still be re-edited by re-opening the page
+- After confirmation, a "Re-detect Sections" option is available if the editor wants to re-run detection
+
+### US-3.6 Section Detection Error Handling
+
+**As an** editor
+**I want to** be notified if section detection fails
+**So that** I can retry or troubleshoot the issue.
+
+**Acceptance Criteria:**
+
+- Detection failures are communicated with a clear error message
+- Page status transitions to DETECTION_FAILED on backend failure
+- A "Retry Detection" button is available on failed pages
+- Network timeouts and server errors are handled gracefully
 
 ## Epic 4: Translation
 
