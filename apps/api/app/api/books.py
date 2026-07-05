@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime, timezone
+from bson import ObjectId
 import hashlib
 import logging
 
 from app.db.client import get_db
+from app.models.page_status import PageStatus
 from app.schemas.book import BookResponse, BookUpdate, BookListItem
 from app.schemas.refs import OwnerRef
 from app.services.s3 import upload_file
@@ -101,11 +103,12 @@ async def create_book(
 
 
 @router.get("/api/books/{book_id}")
-async def get_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    from bson import ObjectId
+async def get_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)): 
     book = await db.books.find_one({"_id": ObjectId(book_id)})
+
     if not book:
         raise HTTPException(404, "Book not found")
+    
     return BookResponse(
         id=str(book["_id"]),
         title=book["title"],
@@ -125,33 +128,48 @@ async def get_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
 
 @router.put("/api/books/{book_id}")
 async def update_book(book_id: str, body: BookUpdate, db: AsyncIOMotorDatabase = Depends(get_db)):
-    from bson import ObjectId
     update = {k: v for k, v in body.model_dump().items() if v is not None}
+
     if not update:
         raise HTTPException(400, "No fields to update")
+    
     update["updatedAt"] = datetime.now(timezone.utc)
+
     result = await db.books.update_one({"_id": ObjectId(book_id)}, {"$set": update})
+
     if result.matched_count == 0:
         raise HTTPException(404, "Book not found")
+    
     return {"ok": True}
 
 
 @router.delete("/api/books/{book_id}")
 async def delete_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    from bson import ObjectId
     result = await db.books.delete_one({"_id": ObjectId(book_id)})
+
     if result.deleted_count == 0:
         raise HTTPException(404, "Book not found")
+    
     return {"ok": True}
 
 
 @router.post("/api/books/{book_id}/build")
 async def build_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    from bson import ObjectId
     book = await db.books.find_one({"_id": ObjectId(book_id)})
+
     if not book:
         raise HTTPException(404, "Book not found")
+
+    total_pages = await db.pages.count_documents({"book.id": book_id})
+    finalized_pages = await db.pages.count_documents(
+        {"book.id": book_id, "status": PageStatus.FINALIZED}
+    )
+    if total_pages == 0 or finalized_pages < total_pages:
+        raise HTTPException(400, "All pages must be finalized before building the book")
+
     from app.tasks.build_book import build_book as build_book_task
+
     logger.info("build_book endpoint book_id=%s queued build_book task", book_id)
     build_book_task.delay(book_id)
+
     return {"status": "BUILDING"}

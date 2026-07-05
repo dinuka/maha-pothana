@@ -5,7 +5,7 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 ROW_CONTENT_RATIO = 0.02
-MERGE_GAP = 12
+MERGE_GAP = 55  # px, tuned against real 200-DPI page renders (render_page_as_image)
 MIN_BAND_HEIGHT = 10
 MIN_SECTION_WIDTH = 20
 MIN_SECTION_HEIGHT = 15
@@ -19,6 +19,7 @@ def detect_page_sections(
     image_data: bytes,
     page_width: int,
     page_height: int,
+    profile: dict[str, dict[str, float]] | None = None,
 ) -> list[dict]:
     try:
         img = Image.open(io.BytesIO(image_data))
@@ -28,8 +29,9 @@ def detect_page_sections(
 
     gray = img.convert("L")
 
-    if page_width <= 0 or page_height <= 0:
-        page_width, page_height = img.size
+    # page_width/page_height (from the PDF mediabox at 72 DPI) never match
+    # the rendered image (200 DPI) -- always trust the real pixel size.
+    page_width, page_height = img.size
 
     bands = _find_content_bands(gray, page_width, page_height)
 
@@ -61,10 +63,93 @@ def detect_page_sections(
             "croppedImageKey": None,
         })
 
+    if profile:
+        sections = _apply_recurring_element_profile(gray, page_width, page_height, sections, profile)
+
+    sections.sort(key=lambda sec: (sec["y"], sec["x"]))
     for i, sec in enumerate(sections):
         sec["sectionOrder"] = i
 
     return sections
+
+
+def _apply_recurring_element_profile(
+    gray: Image.Image,
+    page_width: int,
+    page_height: int,
+    sections: list[dict],
+    profile: dict[str, dict[str, float]],
+) -> list[dict]:
+    """Snap recurring elements (header/footnote/page number) to this book's
+    usual position/size, since their geometry repeats across pages far more
+    reliably than the band detector's per-page guess. For each profiled type:
+    replace a *single* detected section already classified as that type (the
+    band detector found something there, just sized/placed inexactly), or
+    seed a new one if none was detected -- but only when the page has dark
+    content in that spot *and* no other detected section already occupies it.
+    An empty or already-claimed region means this page genuinely lacks the
+    element (e.g. a chapter-start page with no footer) or the content there
+    belongs to something else, so nothing is injected.
+
+    Only same-typed sections are touched: a paragraph that happens to poke
+    into the header zone is never reclassified, moved, or overridden by a
+    seed. A page with more than one section of a profiled type (e.g. two
+    footnote blocks) is left untouched entirely rather than collapsed to one.
+    """
+    kept = [sec for sec in sections if sec["type"] not in profile]
+
+    for sec_type, box in profile.items():
+        x0 = int(box["x"] * page_width)
+        y0 = int(box["y"] * page_height)
+        bw = int(box["width"] * page_width)
+        bh = int(box["height"] * page_height)
+        x1 = min(page_width, x0 + bw)
+        y1 = min(page_height, y0 + bh)
+
+        same_type = [sec for sec in sections if sec["type"] == sec_type]
+        if len(same_type) > 1:
+            kept.extend(same_type)
+            continue
+
+        if not same_type:
+            if not _has_dark_content(gray, x0, y0, x1, y1):
+                continue
+            if any(_bands_overlap(sec["y"], sec["y"] + sec["height"], y0, y1) for sec in sections):
+                continue
+
+        confidence = 0.6 if same_type else 0.4
+        kept.append({
+            "sectionOrder": 0,
+            "type": sec_type,
+            "x": x0,
+            "y": y0,
+            "width": bw,
+            "height": bh,
+            "confidence": confidence,
+            "originalText": None,
+            "croppedImageKey": None,
+        })
+
+    return kept
+
+
+def _bands_overlap(a_y0: int, a_y1: int, b_y0: int, b_y1: int) -> bool:
+    return a_y0 < b_y1 and b_y0 < a_y1
+
+
+def _has_dark_content(gray: Image.Image, x0: int, y0: int, x1: int, y1: int) -> bool:
+    if x1 <= x0 or y1 <= y0:
+        return False
+    pixels = gray.load()
+    min_dark = int((x1 - x0) * (y1 - y0) * ROW_CONTENT_RATIO)
+    dark_count = 0
+    for y in range(y0, y1):
+        for x in range(x0, x1):
+            if pixels[x, y] < 200:
+                dark_count += 1
+                if dark_count > min_dark:
+                    return True
+    return False
 
 
 def _find_content_bands(gray: Image.Image, page_width: int, page_height: int) -> list[tuple[int, int]]:

@@ -143,8 +143,17 @@ describe("PageEditor — loaded (mock Image sync onload)", () => {
     expect(document.body.textContent).toContain("90%")
   })
 
-  it("confirm button is enabled with sections", () => {
+  it("confirm button is disabled on fresh load with no unsaved changes", () => {
     renderWithProps()
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Confirm"),
+    ) as HTMLButtonElement
+    expect(confirmBtn).not.toBeNull()
+    expect(confirmBtn.disabled).toBe(true)
+  })
+
+  it("confirm button is enabled when startDirty is set (e.g. after detection)", () => {
+    renderWithProps({ key: "start-dirty", startDirty: true })
     const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
       b.textContent?.includes("Confirm"),
     ) as HTMLButtonElement
@@ -152,18 +161,38 @@ describe("PageEditor — loaded (mock Image sync onload)", () => {
     expect(confirmBtn.disabled).toBe(false)
   })
 
-  it("calls onSave with ordered sections on confirm", () => {
-    const onSave = vi.fn()
-    renderWithProps({ onSave })
+  it("confirm button enables after modifying a section", () => {
+    renderWithProps({ key: "modify-enables" })
     const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
       b.textContent?.includes("Confirm"),
     ) as HTMLButtonElement
-    confirmBtn.click()
+    expect(confirmBtn.disabled).toBe(true)
+    const rect = document.querySelector('[data-testid="rect"][data-id="s1"]') as HTMLElement
+    rect.click()
+    flushSync(() => {})
+    const deleteBtn = container.querySelector(
+      'button[title*="Delete section"]',
+    ) as HTMLButtonElement
+    deleteBtn.click()
+    flushSync(() => {})
+    expect(confirmBtn.disabled).toBe(false)
+  })
+
+  it("calls onSave with ordered sections on confirm, then disables confirm again", () => {
+    const onSave = vi.fn()
+    renderWithProps({ key: "on-save", startDirty: true, onSave })
+    const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Confirm"),
+    ) as HTMLButtonElement
+    flushSync(() => {
+      confirmBtn.click()
+    })
     expect(onSave).toHaveBeenCalledTimes(1)
     const args = onSave.mock.calls[0][0]
     expect(args).toHaveLength(2)
     expect(args[0]).toMatchObject({ id: "s1", sectionOrder: 0 })
     expect(args[1]).toMatchObject({ id: "s2", sectionOrder: 1 })
+    expect(confirmBtn.disabled).toBe(true)
   })
 
   it("delete button is disabled when no selection", () => {
@@ -201,7 +230,7 @@ describe("PageEditor — loaded (mock Image sync onload)", () => {
 
   it("confirm shows loading state when unsaved changes exist then clears", () => {
     const onSave = vi.fn().mockImplementation(() => {})
-    renderWithProps({ onSave })
+    renderWithProps({ key: "loading-state", startDirty: true, onSave })
     const confirmBtn = Array.from(container.querySelectorAll("button")).find((b) =>
       b.textContent?.includes("Confirm"),
     ) as HTMLButtonElement

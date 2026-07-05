@@ -6,6 +6,8 @@ from bson import ObjectId
 
 from app.tasks.celery_app import celery_app
 from app.config import settings
+from app.models.page_status import PageStatus
+from app.services.book_profile import build_recurring_element_profile
 from app.services.s3 import get_s3
 from app.services.detection import detect_page_sections
 
@@ -32,12 +34,17 @@ async def _detect_sections(page_id: str):
 
         await db.pages.update_one(
             {"_id": ObjectId(page_id)},
-            {"$set": {"status": "PROCESSING"}},
+            {"$set": {"status": PageStatus.PROCESSING}},
         )
 
         page_width = page.get("width", 0)
         page_height = page.get("height", 0)
         image_key = page.get("imageKey")
+        book_id = page.get("book", {}).get("id")
+
+        profile = {}
+        if book_id:
+            profile = await build_recurring_element_profile(db, book_id)
 
         sections_data = None
 
@@ -51,6 +58,7 @@ async def _detect_sections(page_id: str):
                     image_data=image_data,
                     page_width=page_width,
                     page_height=page_height,
+                    profile=profile,
                 )
                 logger.info(
                     "detect_sections page_id=%s detected %d sections from image %s",
@@ -97,7 +105,7 @@ async def _detect_sections(page_id: str):
 
         await db.pages.update_one(
             {"_id": ObjectId(page_id)},
-            {"$set": {"status": "PENDING"}},
+            {"$set": {"status": PageStatus.PENDING}},
         )
 
         return {"page_id": page_id, "sections": len(sections_data)}
@@ -106,7 +114,7 @@ async def _detect_sections(page_id: str):
         logger.error("detect_sections page_id=%s failed: %s", page_id, e, exc_info=True)
         await db.pages.update_one(
             {"_id": ObjectId(page_id)},
-            {"$set": {"status": "DETECTION_FAILED"}},
+            {"$set": {"status": PageStatus.DETECTION_FAILED}},
         )
         return {"error": str(e)}
 

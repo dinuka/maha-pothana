@@ -6,7 +6,11 @@ from unittest.mock import AsyncMock, patch
 async def test_list_pages(client, mock_db, sample_page):
     mock_db.pages.find.return_value.to_list = AsyncMock(return_value=[sample_page])
     mock_db.pages.count_documents = AsyncMock(return_value=1)
-    mock_db.sections.count_documents = AsyncMock(return_value=3)
+    mock_db.sections.aggregate.return_value.to_list = AsyncMock(
+        return_value=[
+            {"_id": sample_page["_id"], "sectionCount": 3, "translatedCount": 0, "approvedCount": 0}
+        ]
+    )
 
     response = await client.get(f'/api/books/{sample_page["book"]["id"]}/pages')
 
@@ -208,3 +212,56 @@ async def test_save_sections_recalculates_order(client, mock_db, sample_page):
     assert first_inserted["type"] == "HEADER"
     assert second_inserted["sectionOrder"] == 1
     assert second_inserted["type"] == "PARAGRAPH"
+
+
+@pytest.mark.asyncio
+async def test_finalize_page(client, mock_db, sample_page):
+    confirmed_page = {**sample_page, "status": "SECTIONS_CONFIRMED"}
+    mock_db.pages.find_one = AsyncMock(return_value=confirmed_page)
+    mock_db.sections.aggregate.return_value.to_list = AsyncMock(
+        return_value=[
+            {"_id": sample_page["_id"], "sectionCount": 2, "translatedCount": 2, "approvedCount": 2}
+        ]
+    )
+    mock_db.pages.update_one = AsyncMock()
+
+    response = await client.post(f'/api/pages/{sample_page["_id"]}/finalize')
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "FINALIZED"
+    update_call = mock_db.pages.update_one.call_args
+    assert str(update_call[0][0]["_id"]) == sample_page["_id"]
+    assert update_call[0][1]["$set"]["status"] == "FINALIZED"
+
+
+@pytest.mark.asyncio
+async def test_finalize_page_not_found(client, mock_db):
+    mock_db.pages.find_one = AsyncMock(return_value=None)
+
+    response = await client.post("/api/pages/507f1f77bcf86cd799439999/finalize")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_finalize_page_requires_sections_confirmed(client, mock_db, sample_page):
+    pending_page = {**sample_page, "status": "PENDING"}
+    mock_db.pages.find_one = AsyncMock(return_value=pending_page)
+
+    response = await client.post(f'/api/pages/{sample_page["_id"]}/finalize')
+
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_finalize_page_requires_all_sections_approved(client, mock_db, sample_page):
+    confirmed_page = {**sample_page, "status": "SECTIONS_CONFIRMED"}
+    mock_db.pages.find_one = AsyncMock(return_value=confirmed_page)
+    mock_db.sections.aggregate.return_value.to_list = AsyncMock(
+        return_value=[
+            {"_id": sample_page["_id"], "sectionCount": 2, "translatedCount": 2, "approvedCount": 1}
+        ]
+    )
+
+    response = await client.post(f'/api/pages/{sample_page["_id"]}/finalize')
+
+    assert response.status_code == 400

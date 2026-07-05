@@ -16,6 +16,7 @@ interface Section {
 interface PageEditorProps {
   pageImageUrl?: string
   initialSections?: Section[]
+  startDirty?: boolean
   onSave?: (sections: Section[]) => void
   onDetectSections?: () => void
 }
@@ -52,16 +53,19 @@ const MAX_UNDO = 50
 export default function PageEditor({
   pageImageUrl,
   initialSections = [],
+  startDirty = false,
   onSave,
   onDetectSections,
 }: PageEditorProps) {
   const [sections, setSections] = useState<Section[]>(initialSections)
+  const [isDirty, setIsDirty] = useState(startDirty)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [drawStart, setDrawStart] = useState({ x: 0, y: 0 })
   const [drawCurrent, setDrawCurrent] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [imageSize, setImageSize] = useState({ width: 800, height: 600 })
+  const [fitScale, setFitScale] = useState(1)
   const [zoom, setZoom] = useState(1)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -88,6 +92,7 @@ export default function PageEditor({
     redoStackRef.current = []
     setCanUndo(true)
     setCanRedo(false)
+    setIsDirty(true)
   }, [])
 
   const loadImage = useCallback(() => {
@@ -100,7 +105,13 @@ export default function PageEditor({
     img.onload = () => {
       const maxW = (containerRef.current?.offsetWidth ?? 800) - 40
       const scale = Math.min(maxW / img.width, 1)
-      setImageSize({ width: img.width * scale, height: img.height * scale })
+      // Sections store x/y/width/height in the image's natural pixel space
+      // (cropping and detection both depend on that). imageSize stays in
+      // natural pixels too; fitScale is applied as a Stage-level transform
+      // so the display can shrink to fit the container without needing to
+      // rescale every section's stored coordinates.
+      setImageSize({ width: img.width, height: img.height })
+      setFitScale(scale)
       imgRef.current = img
       setImageLoaded(true)
       setImageLoading(false)
@@ -124,6 +135,8 @@ export default function PageEditor({
     redoStackRef.current = []
     setCanUndo(false)
     setCanRedo(false)
+    setIsDirty(startDirty)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSections])
 
   useEffect(() => {
@@ -184,7 +197,7 @@ export default function PageEditor({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMouseDown = (e: any) => {
     if (!isDrawingRef.current) return
-    const pos = e.target.getStage()?.getPointerPosition()
+    const pos = e.target.getStage()?.getRelativePointerPosition()
     if (!pos) return
     setIsDragging(true)
     setDrawStart(pos)
@@ -194,7 +207,7 @@ export default function PageEditor({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMouseMove = (e: any) => {
     if (!isDrawingRef.current || !isDragging) return
-    const pos = e.target.getStage()?.getPointerPosition()
+    const pos = e.target.getStage()?.getRelativePointerPosition()
     if (pos) setDrawCurrent(pos)
   }
 
@@ -233,7 +246,7 @@ export default function PageEditor({
   }
 
   const handleSave = () => {
-    if (isSaving || sections.length === 0) return
+    if (isSaving || !isDirty || sections.length === 0) return
     setIsSaving(true)
     undoStackRef.current = []
     redoStackRef.current = []
@@ -242,6 +255,7 @@ export default function PageEditor({
     const ordered = sections.map((s, i) => ({ ...s, sectionOrder: i }))
     try {
       onSave?.(ordered)
+      setIsDirty(false)
     } finally {
       setIsSaving(false)
     }
@@ -265,6 +279,7 @@ export default function PageEditor({
     setSections(prevState)
     setCanUndo(stack.length > 0)
     setCanRedo(true)
+    setIsDirty(true)
   }, [])
 
   const redo = useCallback(() => {
@@ -275,6 +290,7 @@ export default function PageEditor({
     setSections(nextState)
     setCanRedo(stack.length > 0)
     setCanUndo(true)
+    setIsDirty(true)
   }, [])
 
   const toggleDrawMode = () => {
@@ -356,8 +372,11 @@ export default function PageEditor({
     isDrawingRef.current = isDrawing
   })
 
-  const stageWidth = imageSize.width * zoom
-  const stageHeight = imageSize.height * zoom
+  const canSave = isDirty && sections.length > 0 && !isSaving
+
+  const displayScale = fitScale * zoom
+  const stageWidth = imageSize.width * displayScale
+  const stageHeight = imageSize.height * displayScale
 
   const sortedSections = [...sections].sort((a, b) => {
     if (a.y !== b.y) return a.y - b.y
@@ -697,12 +716,12 @@ export default function PageEditor({
           </button>
           <button
             onClick={handleSave}
-            disabled={sections.length === 0 || isSaving}
+            disabled={!canSave}
             className="pe-save-btn"
             style={{
               ...styles.saveBtn,
-              opacity: sections.length === 0 || isSaving ? 0.6 : 1,
-              cursor: sections.length === 0 || isSaving ? "not-allowed" : "pointer",
+              opacity: canSave ? 1 : 0.6,
+              cursor: canSave ? "pointer" : "not-allowed",
             }}
             title="Confirm sections (Ctrl+S)"
           >
@@ -718,8 +737,8 @@ export default function PageEditor({
             ref={stageRef}
             width={stageWidth}
             height={stageHeight}
-            scaleX={zoom}
-            scaleY={zoom}
+            scaleX={displayScale}
+            scaleY={displayScale}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

@@ -84,6 +84,16 @@ async function getPages(
 const isPagesReady = (bookStatus: string) =>
   bookStatus === "READY" || bookStatus === "BUILDING" || bookStatus === "COMPLETED"
 
+const STATUS_DOT_META: Record<PageStatus, { color: string; title: string }> = {
+  [PageStatus.PENDING]: { color: "var(--muted)", title: "Pending" },
+  [PageStatus.PROCESSING]: { color: "#f5a623", title: "Processing" },
+  [PageStatus.DETECTION_FAILED]: { color: "#ef4444", title: "Detection Failed" },
+  [PageStatus.SECTIONS_CONFIRMED]: { color: "var(--success)", title: "Confirmed" },
+  [PageStatus.IN_TRANSLATION]: { color: "#fbbf24", title: "In Translation" },
+  [PageStatus.TRANSLATED]: { color: "#22d3ee", title: "Translated" },
+  [PageStatus.FINALIZED]: { color: "#c084fc", title: "Finalized" },
+}
+
 export default function BookConsolePage({ params }: { params: Promise<{ bookId: string }> }) {
   const [bookId, setBookId] = useState<string | null>(null)
   const [book, setBook] = useState<BookDetail | null>(null)
@@ -290,19 +300,9 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
               <span
                 style={{
                   ...styles.statusDot,
-                  ...(page.status === PageStatus.SECTIONS_CONFIRMED
-                    ? styles.statusDotConfirmed
-                    : page.status === PageStatus.PROCESSING
-                      ? styles.statusDotProcessing
-                      : styles.statusDotPending),
+                  background: STATUS_DOT_META[page.status].color,
                 }}
-                title={
-                  page.status === PageStatus.SECTIONS_CONFIRMED
-                    ? "Confirmed"
-                    : page.status === PageStatus.PROCESSING
-                      ? "Processing"
-                      : "Pending"
-                }
+                title={STATUS_DOT_META[page.status].title}
               />
             </div>
             <div style={styles.pageNum}>{page.originalPageNumber || page.pageNumber}</div>
@@ -412,15 +412,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "50%",
     border: "2.5px solid var(--background)",
     boxShadow: "0 1px 3px rgba(0,0,0,0.35)",
-  },
-  statusDotConfirmed: {
-    background: "var(--success)",
-  },
-  statusDotProcessing: {
-    background: "#f5a623",
-  },
-  statusDotPending: {
-    background: "var(--muted)",
   },
   thumbnailImg: {
     width: "100%",
