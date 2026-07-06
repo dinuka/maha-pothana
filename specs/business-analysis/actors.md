@@ -7,9 +7,11 @@
 | **Super Admin** | Full system access. Can modify any user's roles and permissions.                                       |
 | **Editor**      | Can add books, manage pages/sections, assign translators, approve translations, build finalized books. |
 | **Translator**  | Can view assigned sections, provide translations, add comments.                                        |
+| **AI Agent**    | System-initiated role. Runs background tasks: text extraction, transliteration, auto-translation.      |
 
 ## Permissions Matrix
 
+<<<<<<< Updated upstream
 | Feature                            | Super Admin | Editor | Translator |
 | ---------------------------------- | :---------: | :----: | :--------: |
 | Manage users & roles               |     ✅      |   ❌   |     ❌     |
@@ -26,6 +28,39 @@
 | Invite users to book               |     ✅      |   ✅   |     ❌     |
 | Block translators from book        |     ✅      |   ✅   |     ❌     |
 | Add translator comments            |     ✅      |   ✅   |     ✅     |
+=======
+| Feature                               | Super Admin | Editor | Translator |
+| ------------------------------------- | :---------: | :----: | :--------: |
+| Manage users & roles                  |     ✅      |   ❌   |     ❌     |
+| Upload books                          |     ✅      |   ✅   |     ❌     |
+| View book list                        |     ✅      |   ✅   |     ✅     |
+| Process pages (section detection)     |     ✅      |   ✅   |     ❌     |
+| View detected sections on canvas      |     ✅      |   ✅   |     ❌     |
+| Modify sections (drag/resize)         |     ✅      |   ✅   |     ❌     |
+| Delete sections                       |     ✅      |   ✅   |     ❌     |
+| Add new sections (draw tool)          |     ✅      |   ✅   |     ❌     |
+| Change section type                   |     ✅      |   ✅   |     ❌     |
+| Zoom in/out on page canvas            |     ✅      |   ✅   |     ✅     |
+| Undo/redo section edits               |     ✅      |   ✅   |     ❌     |
+| Confirm & save sections               |     ✅      |   ✅   |     ❌     |
+| Re-detect sections (re-run detection) |     ✅      |   ✅   |     ❌     |
+| Translate sections                    |     ✅      |   ❌   |     ✅     |
+| View translation UI                   |     ✅      |   ✅   |     ✅     |
+| Approve/reject translations           |     ✅      |   ✅   |     ❌     |
+| Provide own translation (override)    |     ✅      |   ✅   |     ❌     |
+| Set translators per book              |     ✅      |   ✅   |     ❌     |
+| Build finalized book                  |     ✅      |   ✅   |     ❌     |
+| Invite users to book                  |     ✅      |   ✅   |     ❌     |
+| Block translators from book           |     ✅      |   ✅   |     ❌     |
+| Add translator comments               |     ✅      |   ✅   |     ✅     |
+| View translation history              |     ✅      |   ✅   |     ✅     |
+| View translation statistics           |     ✅      |   ✅   |     ❌     |
+| View translator performance stats     |     ✅      |   ✅   |     ❌     |
+| Filter translations by language/page  |     ✅      |   ✅   |     ✅     |
+| Trigger AI text extraction            |     ✅      |   ✅   |     ❌     |
+| View AI extraction confidence score   |     ✅      |   ✅   |     ✅     |
+| Regenerate AI transliteration         |     ✅      |   ✅   |     ❌     |
+>>>>>>> Stashed changes
 
 ## Notes
 

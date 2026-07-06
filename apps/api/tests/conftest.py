@@ -32,7 +32,9 @@ def mock_db():
     for col_name in [
         "users", "books", "pages", "sections",
         "translations", "invitations", "comments",
-        "book_editors", "book_builds",
+        "book_editors", "book_builds", "translation_drafts",
+        "ai_text_extractions", "transliterations", "system_config",
+        "redis_progress",
     ]:
         col = MagicMock()
         col.find = MagicMock(return_value=make_mock_cursor())

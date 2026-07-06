@@ -1,4 +1,7 @@
 from pydantic_settings import BaseSettings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -23,7 +26,15 @@ class Settings(BaseSettings):
 
     nextjs_url: str = "http://nextjs:3000"
 
+    openrouter_api_key: str = ""
+    openrouter_model: str = "google/gemma-4-31b-it:free"
+
     model_config = {"env_prefix": "", "case_sensitive": False, "env_file": "../../.env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()
+
+if settings.openrouter_api_key:
+    logger.info("OPENROUTER_API_KEY loaded: %s...", settings.openrouter_api_key[:10])
+else:
+    logger.warning("OPENROUTER_API_KEY is not set in environment")

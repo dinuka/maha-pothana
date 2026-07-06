@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 import random
+from pydantic import BaseModel
 
 from app.db.client import get_db
 from app.schemas.section import NextSectionResponse
@@ -15,8 +16,16 @@ from datetime import datetime, timezone
 router = APIRouter()
 
 
+class ExactLetterUpdate(BaseModel):
+    exactLetter: str
+
+
 @router.get("/api/sections/next")
 async def get_next_section(
+    bookId: str | None = Query(None),
+    language: str | None = Query(None),
+    page_num: int | None = Query(None, alias="page"),
+    status: str | None = Query(None),
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
@@ -31,17 +40,51 @@ async def get_next_section(
                 "as": "translations",
             }
         },
-        {
+    ]
+
+    # Apply status filter
+    if status == "pending":
+        pipeline.append({
             "$match": {
                 "$expr": {
-                    "$lt": [
-                        {"$size": "$translations"},
-                        1,
+                    "$lt": [{"$size": "$translations"}, 1]
+                }
+            }
+        })
+    elif status == "translated":
+        pipeline.append({
+            "$match": {
+                "$expr": {
+                    "$and": [
+                        {"$gt": [{"$size": "$translations"}, 0]},
+                        {"$not": {"$anyElementTrue": {
+                            "$map": {"input": "$translations", "as": "t", "in": "$$t.isApproved"}
+                        }}}
                     ]
                 }
             }
-        },
-        {"$sample": {"size": 1}},
+        })
+    elif status == "approved":
+        pipeline.append({
+            "$match": {
+                "$anyElementTrue": {
+                    "$map": {"input": "$translations", "as": "t", "in": "$$t.isApproved"}
+                }
+            }
+        })
+    else:
+        # Default: sections with no translations
+        pipeline.append({
+            "$match": {
+                "$expr": {
+                    "$lt": [{"$size": "$translations"}, 1]
+                }
+            }
+        })
+
+    pipeline.append({"$sample": {"size": 1}})
+
+    pipeline.extend([
         {
             "$lookup": {
                 "from": "pages",
@@ -53,6 +96,17 @@ async def get_next_section(
             }
         },
         {"$unwind": "$page"},
+    ])
+
+    # Apply book filter
+    if bookId:
+        pipeline.append({"$match": {"page.book.id": bookId}})
+
+    # Apply page number filter
+    if page_num is not None:
+        pipeline.append({"$match": {"page.pageNumber": page_num}})
+
+    pipeline.extend([
         {
             "$lookup": {
                 "from": "books",
@@ -64,7 +118,11 @@ async def get_next_section(
             }
         },
         {"$unwind": "$book"},
-    ]
+    ])
+
+    # Apply language filter
+    if language:
+        pipeline.append({"$match": {"book.translateLanguages": language}})
 
     cursor = db.sections.aggregate(pipeline)
     sections = await cursor.to_list(length=1)
@@ -85,6 +143,8 @@ async def get_next_section(
         id=section_id,
         type=sec.get("type", "PARAGRAPH"),
         originalText=sec.get("originalText"),
+        aiExtractedText=sec.get("aiExtractedText"),
+        exactLetterTranslation=sec.get("exactLetterTranslation"),
         autoTranslatedText=sec.get("autoTranslatedText"),
         pageNumber=page.get("pageNumber", 0),
         bookTitle=book.get("title", ""),
@@ -113,8 +173,63 @@ async def get_section(section_id: str, db: AsyncIOMotorDatabase = Depends(get_db
         "width": sec.get("width", 100),
         "height": sec.get("height", 50),
         "originalText": sec.get("originalText"),
+        "exactLetterTranslation": sec.get("exactLetterTranslation"),
         "croppedImageUrl": cropped_url,
     }
+
+
+@router.put("/api/sections/{section_id}/exact-letter")
+async def update_exact_letter(
+    section_id: str,
+    body: ExactLetterUpdate,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    result = await db.sections.update_one(
+        {"_id": ObjectId(section_id)},
+        {"$set": {"exactLetterTranslation": body.exactLetter}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Section not found")
+    return {"status": "saved"}
+
+
+@router.post("/api/sections/{section_id}/auto-translate")
+async def auto_translate_section(
+    section_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    sec = await db.sections.find_one({"_id": ObjectId(section_id)})
+    if not sec:
+        raise HTTPException(404, "Section not found")
+
+    source_text = sec.get("aiExtractedText") or sec.get("originalText")
+    if not source_text:
+        raise HTTPException(422, "No source text available. Run AI extraction or add text first.")
+
+    book_id = None
+    page = await db.pages.find_one({"_id": ObjectId(sec["page"]["id"])})
+    if page and page.get("book"):
+        book_id = page["book"].get("id")
+    target_lang = "si"
+    if book_id:
+        book = await db.books.find_one({"_id": ObjectId(book_id)})
+        if book:
+            langs = book.get("translateLanguages", [])
+            if langs:
+                target_lang = langs[0]
+
+    translated = await auto_translate(source_text, source_lang="auto", target_lang=target_lang)
+    if translated is None:
+        raise HTTPException(502, "Auto-translation service unavailable")
+
+    await db.sections.update_one(
+        {"_id": ObjectId(section_id)},
+        {"$set": {"autoTranslatedText": translated}},
+    )
+
+    return {"translatedText": translated}
 
 
 @router.post("/api/sections/{section_id}/translate")

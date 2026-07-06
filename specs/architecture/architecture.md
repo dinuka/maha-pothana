@@ -23,11 +23,19 @@ Maha Pothana is a SaaS application for community-driven book translation. It fol
 │     │ │- Translation   │  │
 │     │ │- Section Crop  │  │
 │     │ │- Book Build    │  │
-└─────┘ └───────────────┘  │
-                           │
+│     │ │- AI Extract    │  │
+│     │ │- Transliterate │  │
+└─────┘ └───────┬────────┘  │
+                │            │
+         ┌──────▼──────┐     │
+         │ OpenAI API   │     │
+         │ (GPT-4o)     │     │
+         └─────────────┘     │
+                            │
 ┌──────────────────────────▼──────────────────────────────┐
 │                    MongoDB                                │
-│  (Users, Books, Pages, Sections, Translations, Comments) │
+│  (Users, Books, Pages, Sections, Translations, Comments, │
+│   AITextExtractions, Transliterations, SystemConfig)      │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
@@ -84,15 +92,37 @@ BookConsole
     └── SectionTranslations
 
 TranslatePage
-├── SectionImage (zoomable, from cropped S3 key)
-├── AutoTranslationDisplay
-├── TranslationEditor
-│   ├── TranslatedText (semantic translation)
-│   └── ExactLetterText (optional transliteration)
-├── MyPreviousTranslation (visible to translator before approval)
-├── ApprovedTranslation (visible to all after approval)
-├── PageContext (prev/next thumbnails)
-└── CommentSection
+├── TranslateHeader (book title, back nav)
+├── TranslateFilters (language dropdown, page filter, status filter)
+├── TabBar (Translate | History | Stats)
+├── TranslateTab (active when Translate selected)
+│   ├── SectionImageDisplay (zoomable, shared zoom with source text)
+│   │   ├── CroppedSectionImage (from cropped S3 key)
+│   │   └── ZoomControls
+│   ├── SourceTextPanel (AI/OCR toggle, confidence badge, extract button)
+│   │   ├── TextToggle ("AI Extracted" | "OCR")
+│   │   ├── OriginalText / AIExtractedText (read-only, labeled)
+│   │   ├── ConfidenceBadge (green/yellow/red)
+│   │   └── ExtractButton (editors only)
+│   ├── TranslationEditor
+│   │   ├── TranslatedText (semantic translation)
+│   │   ├── TransliterateButton (AI transliteration trigger)
+│   │   ├── ExactLetterText (pre-filled from transliteration, editable)
+│   │   └── DraftSaveIndicator
+│   ├── MyPreviousTranslation (visible to translator before approval)
+│   ├── ApprovedTranslation (visible to all after approval)
+│   ├── PageContext (prev/next thumbnails)
+│   └── CommentSection
+├── HistoryTab (active when History selected)
+│   ├── HistoryFilters (independent from TranslateTab filters)
+│   ├── HistoryList
+│   │   └── HistoryItem (thumbnail, snippet, status badge, timestamp)
+│   └── InfiniteScrollIndicator
+└── StatsTab (active when Stats selected, editor-only)
+    ├── TranslationStatsCard (progress bar, counts)
+    ├── PerPageBreakdown (green/yellow/gray grid)
+    ├── PerLanguageBreakdown
+    └── TranslatorStatsTable (sortable columns, expandable rows)
 ```
 
 ### State Management
@@ -100,7 +130,13 @@ TranslatePage
 - React Server Components for data-fetching pages
 - Client Components for interactive pages (Konva editor, translation UI)
 - React Context for auth state
-- SWR or React Query for client-side data fetching
+- **React Query (TanStack Query)** for all client-side data fetching (translation queue, history, stats, drafts)
+  - `useQuery` for reads (history, stats, next section)
+  - `useMutation` for writes (submit translation, save draft, approve/reject)
+  - `queryClient.invalidateQueries` to refetch after mutations
+  - 30s stale time for stats queries, immediate refetch for queue
+- URL query params for filter state (persisted, shareable, survives reload)
+- `useReducer` for complex local state in the translation editor (text, exact letter, draft status, dirty flag)
 
 ### Key Libraries
 
@@ -126,7 +162,9 @@ backend/
 │   │   ├── pages.py         # Page operations
 │   │   ├── sections.py      # Section operations
 │   │   ├── translations.py  # Translation routes
-│   │   └── users.py         # User management
+│   │   ├── users.py         # User management
+│   │   ├── extraction.py    # AI text extraction & transliteration routes
+│   │   └── admin_settings.py # Admin config for AI extraction
 │   ├── models/
 │   │   ├── user.py          # MongoDB document models
 │   │   ├── book.py
@@ -141,11 +179,16 @@ backend/
 │   │   ├── pdf.py           # PDF processing
 │   │   ├── ocr.py           # OCR + section detection
 │   │   ├── crop.py          # Crop section images from page images
-│   │   └── translation.py   # LibreTranslate integration
+│   │   ├── translation.py   # LibreTranslate integration
+│   │   └── ai_text.py       # OpenAI GPT-4o Vision + text for extraction & transliteration
 │   ├── tasks/
 │   │   ├── split_pages.py   # Celery task
 │   │   ├── detect_sections.py
 │   │   ├── crop_sections.py # Crop and upload section images
+│   │   ├── auto_translate.py
+│   │   ├── extract_section_text.py  # Single-section AI extraction
+│   │   ├── batch_extract_book.py    # Batch extraction with progress
+│   │   ├── transliterate_section.py # AI transliteration
 │   │   └── build_book.py
 │   └── db/
 │       ├── client.py        # MongoDB client (Motor)
@@ -166,6 +209,8 @@ GET    /api/books/{id}            # Book detail
 PUT    /api/books/{id}            # Update book metadata
 DELETE /api/books/{id}            # Delete book
 POST   /api/books/{id}/build      # Trigger final build
+GET    /api/books/{id}/stats      # Translation stats (cached, editor-only)
+GET    /api/books/{id}/translators/stats  # Per-translator performance (editor-only)
 
 GET    /api/books/{id}/pages      # List pages
 GET    /api/books/{id}/pages/{num}  # Page detail with sections
@@ -173,7 +218,8 @@ GET    /api/books/{id}/pages/{num}  # Page detail with sections
 POST   /api/pages/{id}/sections/detect    # Trigger AI section detection
 PUT    /api/pages/{id}/sections           # Save confirmed sections
 
-GET    /api/sections/next          # Get random untranslated section
+GET    /api/sections/next?bookId={bookId}&language={lang}&page={pageNum}&status={status}
+                                     # Get random untranslated section (with filters)
 GET    /api/sections/{id}          # Section detail (with cropped image URL)
 POST   /api/sections/{id}/translate  # Submit translation
 GET    /api/sections/{id}/translations  # All translations for section
@@ -182,11 +228,28 @@ GET    /api/sections/{id}/my-translation  # Translator's own pending translation
 POST   /api/sections/{id}/comments    # Add comment
 GET    /api/sections/{id}/comments    # List comments
 
-GET    /api/users                # List users (admin)
-PUT    /api/users/{id}/roles     # Update user roles (admin)
+GET    /api/translations/history?bookId={bookId}&translatorId={translatorId}
+         &language={lang}&page={pageNum}&status={status}&cursor={cursor}&limit={20}
+                                     # Translation history (paginated, filtered)
+POST   /api/translations/draft     # Upsert translation draft
+GET    /api/translations/draft?sectionId={sectionId}  # Fetch draft
+DELETE /api/translations/draft/{id}  # Delete draft after submission
 
 POST   /api/books/{id}/invite    # Invite translator
 POST   /api/books/{id}/block     # Block translator
+
+POST   /api/sections/{id}/extract  # Trigger single-section AI text extraction (202)
+POST   /api/books/{id}/pages/{num}/extract  # Batch extract all sections on a page (202)
+POST   /api/books/{id}/extract     # Batch extract ALL sections in a book (202)
+GET    /api/sections/{id}/extraction  # Fetch extraction result with confidence
+POST   /api/sections/{id}/transliterate?targetScript={script}  # Generate transliteration
+GET    /api/sections/{id}/transliterations  # Fetch cached transliterations
+PUT    /api/sections/{id}/source-text  # Update source text (AI or OCR), invalidate transliteration cache
+GET    /api/books/{id}/extraction/status  # Batch extraction progress
+
+GET    /api/admin/settings/extraction  # Fetch AI extraction config (admin only)
+PUT    /api/admin/settings/extraction  # Update AI extraction config (admin only)
+GET    /api/admin/extraction/audit     # Extraction audit log (admin only)
 ```
 
 ### Celery Task Queue
@@ -196,6 +259,10 @@ POST   /api/books/{id}/block     # Block translator
 - `crop_sections(page_id)` — After section confirmation, crop each section from page image → upload to MinIO → update section records with `croppedImageKey`
 - `auto_translate(section_id)` — Call LibreTranslate for initial translation
 - `build_book(book_id)` — Compile approved translations → generate final PDF → upload to MinIO
+- `expire_drafts()` — (scheduled, hourly) Delete TranslationDraft documents older than 24h via TTL index
+- `extract_section_text(section_id)` — Send cropped image to GPT-4o Vision API → save AI-extracted text + confidence to `AITextExtraction` → update `Section.aiExtractedText`
+- `batch_extract_book(book_id)` — Chain of `extract_section_text` tasks for all unextracted sections in a book; progress tracked in Redis; max 5 concurrent via semaphore
+- `transliterate_section(section_id, target_script)` — Call GPT-4o for letter-for-letter script conversion → save to `Transliteration` collection; cache-first lookup
 
 ## Deployment Architecture
 
@@ -233,14 +300,35 @@ services:
 
 ### Data Flow: Translation
 
-1. Translator opens translation page → GET /api/sections/next
-2. Backend selects random section (excluding ones already translated by this user)
+1. Translator opens `/translate` → page auto-loads first section via GET /api/sections/next
+2. Backend selects random section (excluding ones already translated by this user), respecting active filters (language, page, status)
 3. Section's cropped image loaded from MinIO via presigned URL (`section.croppedImageKey`)
-4. Auto-translated text fetched from LibreTranslate (async or cache)
-5. Translator edits, saves → POST translation (with optional `exactLetterTranslation`)
-6. Translator can view their own pending translation via GET /api/sections/{id}/my-translation
-7. When editor approves a translation, it becomes visible to all translators
-8. If editor rejects all translations, section re-enters the pool
+4. Source text displayed alongside the section image (from `Section.originalText`)
+5. Auto-translated text pre-fills the translation input as starting point
+6. Translation input auto-saves to draft (debounced 5s) via POST /api/translations/draft
+7. On page load, existing draft is fetched and pre-fills the input
+8. Translator edits, clicks Submit → POST translation → draft deleted
+9. Translator can view their own pending translation via GET /api/sections/{id}/my-translation
+10. When editor approves a translation, it becomes visible to all translators
+11. If editor rejects all translations, section re-enters the pool
+
+### Data Flow: Translation History
+
+1. Translator clicks "History" tab → GET /api/translations/history?bookId=X&limit=20
+2. Backend queries Translation collection joined with Section and User, sorted by createdAt descending
+3. Translator sees only own translations; editors see all translations for the book
+4. History supports cursor-based pagination (infinite scroll loads more)
+5. Filters (language, page, status) are applied independently from the Translate tab
+6. Clicking a history item navigates to `/translate?section={sectionId}`
+
+### Data Flow: Translation Statistics
+
+1. Editor opens Stats tab → GET /api/books/{bookId}/stats
+2. Backend runs MongoDB aggregation pipeline over Translations + Sections + Pages
+3. Results cached in Redis with 30s TTL key: `stats:{bookId}`
+4. Frontend polls every 30s (aligned with cache TTL) or refetches on tab focus
+5. Per-language and per-page breakdowns rendered in charts
+6. Per-translator stats via GET /api/books/{bookId}/translators/stats (separate cache key)
 
 ### Data Flow: Book Build
 
@@ -249,6 +337,47 @@ services:
 3. Worker iterates pages in order (using `originalPageNumber` for display labels), lays out approved translations, renders PDF
 4. Final PDF uploaded to MinIO
 5. Book status updated to COMPLETED
+
+### Data Flow: AI Text Extraction
+
+1. Editor clicks "Extract Text" on a section → POST /api/sections/{id}/extract
+2. FastAPI enqueues `extract_section_text` Celery task, returns 202 with taskId
+3. Worker downloads cropped section image from MinIO
+4. Worker acquires Redis semaphore (max 5 concurrent)
+5. Worker sends base64 image to OpenAI GPT-4o Vision API
+6. Worker receives extracted text, then calls GPT-4o (text-only) for confidence scoring
+7. Worker saves result to `AITextExtraction` collection and updates `Section.aiExtractedText`
+8. Worker releases semaphore
+9. Frontend polls GET /api/sections/{id}/extraction → shows confidence badge
+
+### Data Flow: Batch Extraction
+
+1. Editor clicks "Extract All" → POST /api/books/{id}/extract
+2. FastAPI checks cost estimate against `SystemConfig.costLimitPerBook`
+3. FastAPI enqueues `batch_extract_book` Celery task
+4. Worker creates chain of `extract_section_text` tasks (5 concurrent via semaphore)
+5. Progress tracked in Redis: `{bookId}:extraction:progress` (total, completed, failed)
+6. Frontend polls GET /api/books/{id}/extraction/status → shows progress bar
+7. On completion, summary shown: "154 extracted, 2 failed" with "Retry Failed" button
+
+### Data Flow: Transliteration
+
+1. Translator clicks "Transliterate" → POST /api/sections/{id}/transliterate?targetScript=sinhala
+2. FastAPI checks `Transliteration` collection for cached result
+3. If cached, returns immediately
+4. If not cached, enqueues `transliterate_section` Celery task
+5. Worker fetches `Section.aiExtractedText` (falls back to `originalText`)
+6. Worker calls GPT-4o (text-only) for letter-for-letter script conversion
+7. Worker saves to `Transliteration` collection
+8. Frontend pre-fills `exactLetterTranslation` field; translator can edit before submitting
+
+### Data Flow: Source Text Update (Bidirectional Sync)
+
+1. User edits source text → PUT /api/sections/{id}/source-text
+2. FastAPI updates `Section.aiExtractedText` or `Section.originalText` based on `source` param
+3. FastAPI invalidates cached `Transliteration` documents for this section
+4. Frontend re-enables "Transliterate" button (cache cleared)
+5. Next auto-translation uses the updated source text
 
 ## MongoDB Schema Notes
 
@@ -259,9 +388,15 @@ services:
   - `books`: `{ ownerId: 1 }`, `{ fileHash: 1 }`, text index on title/author
   - `pages`: `{ bookId: 1, pageNumber: 1 }`
   - `sections`: `{ pageId: 1, sectionOrder: 1 }`
-  - `translations`: `{ sectionId: 1, translatorId: 1 }` unique, `{ sectionId: 1, isApproved: 1 }`
+  - `translations`: `{ sectionId: 1, translatorId: 1 }` unique, `{ sectionId: 1, isApproved: 1 }`, `{ createdAt: -1 }`, `{ translatorId: 1, createdAt: -1 }` (for history queries)
   - `comments`: `{ sectionId: 1, createdAt: 1 }`
   - `invitations`: `{ bookId: 1, userId: 1 }` unique
+  - `translation_drafts`: `{ sectionId: 1, translatorId: 1 }` unique, TTL index on `createdAt` (24h expiry)
+  - `ai_text_extractions`: `{ sectionId: 1 }` unique (AI extraction results)
+  - `transliterations`: `{ translationId: 1 }` unique (AI transliteration cache)
+  - `system_config`: `{ key: 1 }` unique (admin configuration key-value store)
+- **Section schema additions**: `aiExtractedText` (string, nullable) stores AI-extracted text; `originalText` remains as OCR fallback
+- **Translation schema additions**: `exactLetterTranslation` (string, nullable) stores transliteration; `transliterationSource` ("ai" | "manual") tracks origin
 
 ## Security Considerations
 
@@ -272,6 +407,9 @@ services:
 - Input validation with Pydantic on all endpoints
 - Rate limiting on auth and translation endpoints
 - CORS configured for Next.js origin only
+- **OpenAI API key** stored in env var `OPENAI_API_KEY`, never committed; used server-side only in Celery workers
+- **AI extraction cost limits** enforced server-side via `SystemConfig` to prevent budget overruns
+- **Admin-only endpoints** for AI configuration require SUPER_ADMIN role
 
 ## Offline/Local Development
 

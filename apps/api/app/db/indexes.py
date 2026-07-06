@@ -24,3 +24,19 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.book_editors.create_index([("book.id", 1), ("user.id", 1)], unique=True)
 
     await db.book_builds.create_index("book.id")
+
+    await db.translation_drafts.create_index(
+        [("sectionId", 1), ("translatorId", 1)], unique=True
+    )
+    await db.translation_drafts.create_index("createdAt", expireAfterSeconds=86400)
+
+    await db.ai_text_extractions.create_index("sectionId", unique=True)
+    await db.ai_text_extractions.create_index("status")
+
+    await db.transliterations.create_index(
+        [("sectionId", 1), ("targetScript", 1)], unique=True
+    )
+
+    await db.system_config.create_index("key", unique=True)
+
+    await db.redis_progress.create_index("bookId")
