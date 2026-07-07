@@ -1,5 +1,6 @@
 from app.tasks.celery_app import celery_app
 from app.config import settings
+from app.models.page_status import PageStatus
 from app.services.s3 import get_s3, upload_file
 from app.services.pdf import (
     extract_page_count,
@@ -66,7 +67,7 @@ async def _split_pages(book_id: str):
                 "thumbnailKey": thumbnail_key,
                 "width": width,
                 "height": height,
-                "status": "PENDING",
+                "status": PageStatus.PENDING,
             })
             logger.info("split_pages book_id=%s page=%d uploaded key=%s size=%dx%d", book_id, i + 1, page_key, width, height)
 

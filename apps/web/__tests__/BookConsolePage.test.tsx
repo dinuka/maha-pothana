@@ -34,7 +34,8 @@ const jsonResponse = (body: unknown) => ({
   json: () => Promise.resolve(body),
 })
 
-const renderPage = () => render(React.createElement(BookConsolePage, { params: Promise.resolve({ bookId: "book-1" }) }))
+const renderPage = () =>
+  render(React.createElement(BookConsolePage, { params: Promise.resolve({ bookId: "book-1" }) }))
 
 type IntersectionCallback = (entries: { isIntersecting: boolean }[]) => void
 
@@ -235,9 +236,9 @@ describe("BookConsolePage", () => {
     })
 
     const pageFetchCalls = fetchMock.mock.calls.filter(([url]: [string]) => url.includes("/pages?"))
-    expect(pageFetchCalls.some(([url]: [string]) => url.includes("skip=0") && url.includes("limit=7"))).toBe(
-      false,
-    )
+    expect(
+      pageFetchCalls.some(([url]: [string]) => url.includes("skip=0") && url.includes("limit=7")),
+    ).toBe(false)
     expect(pageFetchCalls[0]?.[0]).toContain("skip=0")
     expect(pageFetchCalls[0]?.[0]).toContain("limit=35")
   })
