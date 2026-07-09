@@ -518,6 +518,23 @@ This test plan covers the core features of the Maha Pothana book translation pla
 | CONC-11 | Same section deleted by two editors          | 1. Editor A deletes section S1 2. Editor B also deletes section S1 | No error. Section S1 not present after both saves.                                          |
 | CONC-12 | Detection triggered while editing            | 1. Edit sections manually 2. Click Detect                          | Confirmation dialog: "Detect will replace your manual edits. Continue?" [Cancel] [Continue] |
 
+### 9. Page Editor — Concurrent Editing & Race Conditions
+
+| TC-ID   | Scenario                                     | Steps                                                              | Expected Result                                                                             |
+| ------- | -------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| CONC-01 | Two editors edit same page simultaneously    | 1. Both open same page 2. Both modify sections 3. Both confirm     | Last save wins. No data corruption.                                                         |
+| CONC-02 | Save while detection running                 | 1. Start detection 2. Immediately click Confirm                    | Confirm button disabled during detection. Queue save after detect.                          |
+| CONC-03 | Detection while saving                       | 1. Click Confirm 2. Immediately click Detect                       | Detect button disabled during save. Queue detect after save.                                |
+| CONC-04 | Rapid double-click Confirm                   | 1. Click Confirm twice rapidly                                     | Only one API call made. No duplicate sections created.                                      |
+| CONC-05 | Rapid double-click Delete                    | 1. Select section 2. Double-click Delete                           | Section deleted once. No error from deleting non-existent section.                          |
+| CONC-06 | Rapid draw + delete                          | 1. Draw section 2. Immediately delete                              | Section added then removed. Undo stack has two entries.                                     |
+| CONC-07 | Browser back button during save              | 1. Click Confirm 2. Immediately navigate away                      | User warned via `beforeunload` if save in flight.                                           |
+| CONC-08 | Page reload during drawing                   | 1. Enter draw mode 2. Reload page                                  | Draw mode cancelled. No phantom section created.                                            |
+| CONC-09 | Multiple rapid zoom changes                  | 1. Rapidly click +/- 10 times                                      | Zoom stabilizes at correct value. No performance degradation.                               |
+| CONC-10 | API returns stale data after concurrent save | 1. Two editors save different sections 2. Refresh                  | Full section state reflects last write for each section.                                    |
+| CONC-11 | Same section deleted by two editors          | 1. Editor A deletes section S1 2. Editor B also deletes section S1 | No error. Section S1 not present after both saves.                                          |
+| CONC-12 | Detection triggered while editing            | 1. Edit sections manually 2. Click Detect                          | Confirmation dialog: "Detect will replace your manual edits. Continue?" [Cancel] [Continue] |
+
 ## Regression Checklist
 
 ### Core Platform

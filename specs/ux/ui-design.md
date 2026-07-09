@@ -229,7 +229,78 @@ The translation page uses a **tabbed layout** with three tabs: Translate, Histor
 | PAGE_NUMBER   | `#6B7280` (gray-500)   | 25%            | `PAGE_NUMBER`   | Page numbers     |
 | OTHER         | `#8B5CF6` (violet-500) | 25%            | `OTHER`         | Miscellaneous    |
 
-### 2. Translation Interface
+- Stroke color matches fill color
+- Stroke width: 1px (unselected), 2px white (selected)
+- Type label text: 11px bold, same color as fill, positioned at top-left of rectangle with 4px offset
+
+#### Toolbar Icons & Controls
+
+| #   | Control          | Type           | Icon/Text                              | Behavior                                                              |
+| --- | ---------------- | -------------- | -------------------------------------- | --------------------------------------------------------------------- |
+| 1   | Add Section      | Toggle button  | `[📐 Add Section]` / `[✕ Cancel Draw]` | Toggles draw mode. Active state: primary color background             |
+| 2   | Delete           | Action button  | `[🗑 Delete]`                          | Deletes selected section. Disabled when no selection                  |
+| 3   | Type Selector    | Dropdown       | `[Type: PARAGRAPH ▼]`                  | Only visible when section selected. Changes section type              |
+| 4   | Undo             | Action button  | `[↩]`                                  | Reverses last action. Disabled when undo stack empty                  |
+| 5   | Redo             | Action button  | `[↪]`                                  | Reapplies last undone action. Disabled when redo stack empty          |
+| 6   | Detect Sections  | Action button  | `[✨ Detect Sections]`                 | Triggers ML-based section detection. Disabled during detection/saving |
+| 7   | Zoom Out         | Action button  | `[−]`                                  | Decreases zoom by 10% (min 50%)                                       |
+| 8   | Zoom Level       | Label          | `100%`                                 | Displays current zoom percentage                                      |
+| 9   | Zoom In          | Action button  | `[+]`                                  | Increases zoom by 10% (max 300%)                                      |
+| 10  | Confirm Sections | Primary action | `[✓ Confirm Sections]`                 | Saves all sections to API. Shows spinner while saving                 |
+
+#### Keyboard Shortcuts
+
+| Key                       | Context        | Action                                      |
+| ------------------------- | -------------- | ------------------------------------------- |
+| `Delete` / `Backspace`    | Canvas focused | Delete selected section                     |
+| `Ctrl+Z`                  | Anywhere       | Undo                                        |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Anywhere       | Redo                                        |
+| `Escape`                  | Canvas focused | Deselect current section / Cancel draw mode |
+| `+` / `=`                 | Canvas focused | Zoom in                                     |
+| `-`                       | Canvas focused | Zoom out                                    |
+| `Ctrl+S`                  | Anywhere       | Save/confirm sections                       |
+| `D`                       | Canvas focused | Toggle draw mode                            |
+
+- Keyboard shortcuts only fire when the canvas area is focused or no text input is active
+- Tooltips on toolbar buttons show the associated shortcut (e.g., "Delete (Delete)")
+- A small `[?]` help button in the toolbar can toggle a keyboard shortcut cheat sheet overlay
+
+#### Undo/Redo System
+
+- Internal history stack (array of section snapshots) kept in component state
+- Each undoable action (add, delete, move, resize, type change) pushes current state to undo stack
+- Redo stack accumulates undone states; cleared when a new action is performed
+- Stacks are cleared when sections are confirmed/saved to API
+- Maximum stack depth: 50 actions (to prevent memory issues)
+
+#### Draw Mode
+
+1. User clicks "Add Section" button → button highlights, cursor changes to crosshair
+2. User clicks and drags on canvas → dashed preview rectangle follows cursor
+3. On mouseup, if rectangle area > 10x10px, new section is created with type PARAGRAPH
+4. New section is auto-selected with Transform handles
+5. Draw mode automatically exits after successful draw
+6. User can press Escape or click "Cancel Draw" to exit without drawing
+
+### 2. Confirmation Flow
+
+1. User modifies sections (add, delete, move, resize, change type)
+2. User clicks "Confirm Sections" (or presses Ctrl+S)
+3. Button shows spinner, all edit controls disabled
+4. Frontend sends raw array of sections `[{ id, sectionOrder, type, x, y, width, height }]` via `PUT /api/pages/{pageId}/sections`
+5. **On success**: Toast "Sections confirmed!" → Canvas enters read-only confirmation state → "Re-detect Sections" button appears
+6. **On failure**: Error toast "Failed to save sections" + [Retry] button
+
+### 3. Section Detection Flow
+
+1. User clicks "Detect Sections" (or detection auto-runs on page load)
+2. Loading overlay appears: "Detecting sections..." with spinner
+3. Backend runs ML detection (LayoutParser) asynchronously via Celery
+4. On completion, frontend refetches page data → sections appear as colored rectangles
+5. **On failure**: Error state "Detection failed" + [Retry Detection] button. Page status `DETECTION_FAILED`
+6. After initial confirmation, "Re-detect Sections" button is available for re-running detection
+
+### 4. Translation Interface
 
 - Stroke color matches fill color
 - Stroke width: 1px (unselected), 2px white (selected)
