@@ -198,14 +198,14 @@ The current workflow relies on Tesseract OCR for text extraction from section im
 
 ## Implementation Priority
 
-| Priority | Story                                                              | Effort | Impact                                                              |
-| -------- | ------------------------------------------------------------------ | ------ | ------------------------------------------------------------------- |
-| P0       | US-ST-1: AI Text Extraction for Sections                          | Large  | Foundation — all other stories depend on extracted text existing     |
-| P0       | US-ST-3: Replace OCR with AI Text in Translation Flow             | Small  | Immediate translator UX improvement — works once extraction exists   |
-| P1       | US-ST-2: AI Transliteration Between Indic Scripts                 | Medium | High — eliminates manual transliteration work                       |
-| P1       | US-ST-4: Section-Level Extraction Status Tracking                 | Medium | High — visibility into extraction progress                          |
-| P2       | US-ST-5: Batch Auto-Extract All Sections for a Book               | Medium | Medium — convenience, but single-section extraction works as fallback |
-| P3       | US-ST-6: Configure AI Extraction Model and Thresholds             | Small  | Low — only needed after extraction is working in production          |
+| Priority | Story                                                 | Effort | Impact                                                                |
+| -------- | ----------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| P0       | US-ST-1: AI Text Extraction for Sections              | Large  | Foundation — all other stories depend on extracted text existing      |
+| P0       | US-ST-3: Replace OCR with AI Text in Translation Flow | Small  | Immediate translator UX improvement — works once extraction exists    |
+| P1       | US-ST-2: AI Transliteration Between Indic Scripts     | Medium | High — eliminates manual transliteration work                         |
+| P1       | US-ST-4: Section-Level Extraction Status Tracking     | Medium | High — visibility into extraction progress                            |
+| P2       | US-ST-5: Batch Auto-Extract All Sections for a Book   | Medium | Medium — convenience, but single-section extraction works as fallback |
+| P3       | US-ST-6: Configure AI Extraction Model and Thresholds | Small  | Low — only needed after extraction is working in production           |
 
 ---
 

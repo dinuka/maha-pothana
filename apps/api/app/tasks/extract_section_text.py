@@ -9,7 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.config import settings
 from app.tasks.celery_app import celery_app
 from app.services.s3 import get_s3
-from app.services.ai_text import extract_text
+from app.services.ai_text import extract_text, EXTRACTION_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ async def _extract_section_text(section_id: str):
                     "sectionId": section_id,
                     "extractedText": "",
                     "confidence": 0.0,
-                    "model": settings.openrouter_model,
+                    "model": EXTRACTION_MODEL,
                     "processingTimeMs": elapsed,
                     "status": "failed",
                     "rawResponse": {"error": error_msg},

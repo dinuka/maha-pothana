@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { apiFetchBrowser } from "@/lib/apiClientBrowser"
-import type { NextSectionResponse } from "@/lib/api/translations"
+import { analyzeSection, type NextSectionResponse } from "@/lib/api/translations"
 import { SourceTextPanel } from "./components/SourceTextPanel"
+import { VerseAnalysisPanel } from "./components/VerseAnalysisPanel"
+import { PageImageViewer } from "./components/PageImageViewer"
 import { DraftSaveIndicator } from "./components/DraftSaveIndicator"
 import { useTranslationDraft } from "@/hooks/useTranslationDraft"
 import type { TranslationFilters } from "@/hooks/useTranslationFilters"
@@ -11,6 +13,7 @@ import type { TranslationFilters } from "@/hooks/useTranslationFilters"
 interface TranslateTabProps {
   filters: TranslationFilters
   isEditor?: boolean
+  onSubmitted?: () => void
 }
 
 interface TransliterationState {
@@ -20,9 +23,10 @@ interface TransliterationState {
   error: boolean
 }
 
-export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) => {
+export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: TranslateTabProps) => {
   const [section, setSection] = useState<NextSectionResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const [transitioning, setTransitioning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [myTranslation, setMyTranslation] = useState<{
     translatedText: string
@@ -35,7 +39,9 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
   const [zoom, setZoom] = useState(100)
   const [sourceTextZoom, setSourceTextZoom] = useState(100)
   const [isDragging, setIsDragging] = useState(false)
-  const [extractionStatus, setExtractionStatus] = useState<"extracted" | "pending" | "failed" | null>(null)
+  const [extractionStatus, setExtractionStatus] = useState<
+    "extracted" | "pending" | "failed" | null
+  >(null)
   const [extractionConfidence, setExtractionConfidence] = useState<number | null>(null)
   const [sourceText, setSourceText] = useState<string | null>(null)
   const [aiText, setAiText] = useState<string | null>(null)
@@ -47,7 +53,13 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
   })
   const [extracting, setExtracting] = useState(false)
   const [transliterating, setTransliterating] = useState(false)
+  const [reverseTransliterating, setReverseTransliterating] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [wordByWordMeaning, setWordByWordMeaning] = useState<string | null>(null)
+  const [fullMeaning, setFullMeaning] = useState<string | null>(null)
+  const [simplifiedMeaning, setSimplifiedMeaning] = useState<string | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null)
   const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -123,17 +135,13 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
   }
 
   const fetchNextSection = async (currentFilters: TranslationFilters) => {
-    setLoading(true)
+    const isInitialLoad = !section
+    if (isInitialLoad) {
+      setLoading(true)
+    } else {
+      setTransitioning(true)
+    }
     setError(null)
-    setMyTranslation(null)
-    setExactLetter("")
-    setTranslatedText("")
-    setTransliteration({ text: "", source: null, loading: false, error: false })
-    setExtractionStatus(null)
-    setExtractionConfidence(null)
-    setAiText(null)
-    setSourceText(null)
-    resetDirty()
     try {
       const params = new URLSearchParams()
       if (currentFilters.bookId) params.set("bookId", currentFilters.bookId)
@@ -150,12 +158,21 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
       }
       if (!res.ok) throw new Error("Failed to fetch section")
       const data = (await res.json()) as NextSectionResponse
+
       setSection(data)
+      setMyTranslation(null)
+      setExactLetter(data.exactLetterTranslation ?? "")
+      setTranslatedText(data.autoTranslatedText ?? "")
+      setTransliteration({ text: "", source: null, loading: false, error: false })
+      setExtractionStatus(data.aiExtractedText ? "extracted" : null)
+      setExtractionConfidence(null)
       setSourceText(data.originalText)
       setAiText(data.aiExtractedText)
-      setExtractionStatus(data.aiExtractedText ? "extracted" : null)
-      setTranslatedText(data.autoTranslatedText ?? "")
-      if (data.exactLetterTranslation) setExactLetter(data.exactLetterTranslation)
+      setWordByWordMeaning(data.wordByWordMeaning)
+      setFullMeaning(data.fullMeaning)
+      setSimplifiedMeaning(data.simplifiedMeaning)
+      setAnalyzeError(null)
+      resetDirty()
       fetchMyTranslation(data.id)
       fetchExtraction(data.id)
       fetchTransliterations(data.id)
@@ -163,18 +180,26 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
       setError(err instanceof Error ? err.message : "Error loading section")
     } finally {
       setLoading(false)
+      setTransitioning(false)
     }
   }
 
-  const handleExtract = async () => {
+  const handleExtract = async (force = false) => {
     if (!section || extracting) return
     setExtracting(true)
     setExtractionStatus("pending")
     setAiError(null)
     try {
-      await apiFetchBrowser(`/api/sections/${section.id}/extract`, {
+      const forceParam = force ? "?force=true" : ""
+      const res = await apiFetchBrowser(`/api/sections/${section.id}/extract${forceParam}`, {
         method: "POST",
       })
+      if (!res.ok && res.status !== 409) {
+        setExtractionStatus("failed")
+        setExtracting(false)
+        setAiError(`Extraction failed (${res.status})`)
+        return
+      }
       let attempts = 0
       const poll = setInterval(async () => {
         attempts++
@@ -205,7 +230,7 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
             setExtractionStatus("failed")
             setExtracting(false)
             try {
-              const errData = await res.json() as { detail?: string }
+              const errData = (await res.json()) as { detail?: string }
               setAiError(errData.detail || `Extraction failed (${res.status})`)
             } catch {
               setAiError(`Extraction failed (${res.status})`)
@@ -233,7 +258,7 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
       const forceParam = force ? "&force=true" : ""
       const res = await apiFetchBrowser(
         `/api/sections/${section.id}/transliterate?target_script=sinhala${forceParam}`,
-        { method: "POST" }
+        { method: "POST" },
       )
       if (res.ok) {
         const data = (await res.json()) as {
@@ -257,9 +282,7 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
             const timer = setTimeout(async () => {
               attempts++
               try {
-                const tRes = await apiFetchBrowser(
-                  `/api/sections/${section.id}/transliterations`
-                )
+                const tRes = await apiFetchBrowser(`/api/sections/${section.id}/transliterations`)
                 if (tRes.ok) {
                   const tData = (await tRes.json()) as {
                     transliterations: Array<{ transliteratedText: string }>
@@ -320,7 +343,7 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
         try {
           const res = await apiFetchBrowser(
             `/api/sections/${section.id}/transliterate?target_script=sinhala`,
-            { method: "POST" }
+            { method: "POST" },
           )
           if (res.ok) {
             const data = (await res.json()) as {
@@ -345,7 +368,7 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
                   attempts++
                   try {
                     const tRes = await apiFetchBrowser(
-                      `/api/sections/${section.id}/transliterations`
+                      `/api/sections/${section.id}/transliterations`,
                     )
                     if (tRes.ok) {
                       const tData = (await tRes.json()) as {
@@ -361,9 +384,9 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
                             loading: false,
                             error: false,
                           })
-                        setExactLetter(first.transliteratedText)
-                        saveExactLetter(first.transliteratedText)
-                        setTransliterating(false)
+                          setExactLetter(first.transliteratedText)
+                          saveExactLetter(first.transliteratedText)
+                          setTransliterating(false)
                           return
                         }
                       }
@@ -376,12 +399,12 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
                     setTransliterating(false)
                     return
                   }
-                    schedulePoll(10000)
-                  }, delay)
-                }
-                schedulePoll(10000)
+                  schedulePoll(10000)
+                }, delay)
               }
-            } else {
+              schedulePoll(10000)
+            }
+          } else {
             setTransliteration((prev) => ({ ...prev, loading: false, error: true }))
           }
         } catch {
@@ -391,24 +414,27 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
         }
       }
     },
-    [section]
+    [section],
   )
 
-  const saveExactLetter = useCallback(async (value: string) => {
-    if (!section) return
-    try {
-      await apiFetchBrowser(`/api/sections/${section.id}/exact-letter`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ exactLetter: value }),
-      })
-    } catch {
-      /* silent */
-    }
-  }, [section])
+  const saveExactLetter = useCallback(
+    async (value: string) => {
+      if (!section) return
+      try {
+        await apiFetchBrowser(`/api/sections/${section.id}/exact-letter`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ exactLetter: value }),
+        })
+      } catch {
+        /* silent */
+      }
+    },
+    [section],
+  )
 
-  const exactLetterTimer = useRef<ReturnType<typeof setTimeout>>()
-  const reverseTimer = useRef<ReturnType<typeof setTimeout>>()
+  const exactLetterTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const reverseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const prevSourceTextRef = useRef<string | null>(null)
 
   const handleExactLetterChange = useCallback(
@@ -423,19 +449,17 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
       reverseTimer.current = setTimeout(async () => {
         if (!section || !value.trim()) return
         prevSourceTextRef.current = aiText || sourceText || null
+        setReverseTransliterating(true)
         try {
-          const res = await apiFetchBrowser(
-            `/api/sections/${section.id}/reverse-transliterate`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                transliteratedText: value.trim(),
-                sourceScript: "sinhala",
-                targetScript: section.book?.sourceLanguage || "unknown",
-              }),
-            }
-          )
+          const res = await apiFetchBrowser(`/api/sections/${section.id}/reverse-transliterate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transliteratedText: value.trim(),
+              sourceScript: "sinhala",
+              targetScript: section.book?.sourceLanguage || "unknown",
+            }),
+          })
           if (res.ok) {
             const data = (await res.json()) as { sourceText: string }
             setAiText(data.sourceText)
@@ -443,44 +467,42 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
           }
         } catch {
           /* silent */
+        } finally {
+          setReverseTransliterating(false)
         }
       }, 3000)
     },
-    [transliteration.text, saveExactLetter, section, aiText, sourceText]
+    [transliteration.text, saveExactLetter, section, aiText, sourceText],
   )
 
-  const handleExactLetterKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.ctrlKey && e.key === "z") {
-        e.preventDefault()
-        if (reverseTimer.current) clearTimeout(reverseTimer.current)
-        if (prevSourceTextRef.current !== null) {
-          setAiText(prevSourceTextRef.current)
-          setSourceText(prevSourceTextRef.current)
-          prevSourceTextRef.current = null
-        }
+  const handleExactLetterKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.ctrlKey && e.key === "z") {
+      e.preventDefault()
+      if (reverseTimer.current) clearTimeout(reverseTimer.current)
+      if (prevSourceTextRef.current !== null) {
+        setAiText(prevSourceTextRef.current)
+        setSourceText(prevSourceTextRef.current)
+        prevSourceTextRef.current = null
       }
-    },
-    []
-  )
+    }
+  }, [])
 
   const handleExactLetterBlur = useCallback(async () => {
     if (!section || !exactLetter.trim() || exactLetter === transliteration.text) return
     saveExactLetter(exactLetter.trim())
     prevSourceTextRef.current = aiText || sourceText || null
+    if (reverseTimer.current) clearTimeout(reverseTimer.current)
+    setReverseTransliterating(true)
     try {
-      const res = await apiFetchBrowser(
-        `/api/sections/${section.id}/reverse-transliterate`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transliteratedText: exactLetter.trim(),
-            sourceScript: "sinhala",
-            targetScript: section.book?.sourceLanguage || "unknown",
-          }),
-        }
-      )
+      const res = await apiFetchBrowser(`/api/sections/${section.id}/reverse-transliterate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transliteratedText: exactLetter.trim(),
+          sourceScript: "sinhala",
+          targetScript: section.book?.sourceLanguage || "unknown",
+        }),
+      })
       if (res.ok) {
         const data = (await res.json()) as { sourceText: string }
         setAiText(data.sourceText)
@@ -488,6 +510,8 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
       }
     } catch {
       /* noop */
+    } finally {
+      setReverseTransliterating(false)
     }
   }, [section, exactLetter, transliteration.text])
 
@@ -507,10 +531,9 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
       setSuccessMessage("Translation saved!")
       resetDirty()
       await clearDraft()
-      setTimeout(() => {
-        setSuccessMessage("")
-        fetchNextSection(filters)
-      }, 1500)
+      onSubmitted?.()
+      await fetchNextSection(filters)
+      setSuccessMessage("")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error saving translation")
     } finally {
@@ -518,24 +541,19 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
     }
   }
 
-  const [autoTranslating, setAutoTranslating] = useState(false)
-
-  const handleAutoTranslate = async () => {
-    if (!section || autoTranslating) return
-    setAutoTranslating(true)
+  const handleAnalyze = async () => {
+    if (!section || analyzing) return
+    setAnalyzing(true)
+    setAnalyzeError(null)
     try {
-      const res = await apiFetchBrowser(
-        `/api/sections/${section.id}/auto-translate`,
-        { method: "POST" }
-      )
-      if (res.ok) {
-        const data = (await res.json()) as { translatedText: string }
-        setTranslatedText(data.translatedText)
-      }
+      const data = await analyzeSection(section.id)
+      setWordByWordMeaning(data.wordByWordMeaning)
+      setFullMeaning(data.fullMeaning)
+      setSimplifiedMeaning(data.simplifiedMeaning)
     } catch {
-      /* silent */
+      setAnalyzeError("Verse analysis unavailable. Please try again.")
     } finally {
-      setAutoTranslating(false)
+      setAnalyzing(false)
     }
   }
 
@@ -549,17 +567,19 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
   const handleZoomOut = () => setZoom((z) => Math.max(z - 10, 50))
   const handleZoomReset = () => setZoom(100)
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 0) return
-      const el = scrollRef.current
-      if (!el) return
-      setIsDragging(true)
-      dragStart.current = { x: e.clientX, y: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop }
-      e.preventDefault()
-    },
-    []
-  )
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    const el = scrollRef.current
+    if (!el) return
+    setIsDragging(true)
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: el.scrollLeft,
+      scrollTop: el.scrollTop,
+    }
+    e.preventDefault()
+  }, [])
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
@@ -571,7 +591,7 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
       el.scrollLeft = dragStart.current.scrollLeft - dx
       el.scrollTop = dragStart.current.scrollTop - dy
     },
-    [isDragging]
+    [isDragging],
   )
 
   const handleMouseUp = useCallback(() => {
@@ -614,21 +634,52 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
 
       {section && (
         <>
-          <div style={styles.header}>
+          <div style={{ ...styles.header, opacity: transitioning ? 0.6 : 1 }}>
             <div>
               <strong>{section.bookTitle}</strong>
               <span style={styles.pageIndicator}> — Page {section.pageNumber}</span>
             </div>
             <div style={styles.actions}>
-              <button onClick={() => fetchNextSection(filters)} style={styles.skipBtn}>Skip</button>
-              <button onClick={handleSave} disabled={saving} style={styles.saveBtn}>
-                {saving ? "Saving..." : "Submit Translation"}
+              <button
+                onClick={() => fetchNextSection(filters)}
+                disabled={saving || transitioning}
+                style={{
+                  ...styles.skipBtn,
+                  cursor: saving || transitioning ? "not-allowed" : "pointer",
+                }}
+              >
+                {transitioning ? "Loading..." : "Skip"}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || transitioning}
+                style={{
+                  ...styles.saveBtn,
+                  cursor: saving || transitioning ? "not-allowed" : "pointer",
+                  opacity: saving || transitioning ? 0.7 : 1,
+                }}
+              >
+                {saving ? "Submitting..." : "Submit Translation"}
               </button>
             </div>
           </div>
 
+          <PageImageViewer bookId={section.book.id} pageNumber={section.pageNumber} />
+
           <div style={styles.topRow}>
             <div style={styles.imageColumn}>
+              <div style={styles.zoomControls}>
+                <button onClick={handleZoomOut} style={styles.zoomBtn} aria-label="Zoom out">
+                  −
+                </button>
+                <span style={{ fontSize: 13, color: "var(--foreground)" }}>{zoom}%</span>
+                <button onClick={handleZoomIn} style={styles.zoomBtn} aria-label="Zoom in">
+                  +
+                </button>
+                <button onClick={handleZoomReset} style={styles.zoomBtn} aria-label="Reset zoom">
+                  ⟳
+                </button>
+              </div>
               <div
                 ref={scrollRef}
                 style={{
@@ -660,12 +711,6 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
                   )}
                 </div>
               </div>
-              <div style={styles.zoomControls}>
-                <button onClick={handleZoomOut} style={styles.zoomBtn} aria-label="Zoom out">−</button>
-                <span style={{ fontSize: 13, color: "var(--foreground)" }}>{zoom}%</span>
-                <button onClick={handleZoomIn} style={styles.zoomBtn} aria-label="Zoom in">+</button>
-                <button onClick={handleZoomReset} style={styles.zoomBtn} aria-label="Reset zoom">⟳</button>
-              </div>
             </div>
 
             <div style={styles.sourceTextColumn}>
@@ -675,8 +720,6 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
                 extractionStatus={extractionStatus}
                 confidence={extractionConfidence}
                 isEditor={isEditor}
-                bookId={section.book.id}
-                pageNumber={section.pageNumber}
                 zoom={sourceTextZoom}
                 onZoomIn={() => setSourceTextZoom((z) => Math.min(z + 10, 300))}
                 onZoomOut={() => setSourceTextZoom((z) => Math.max(z - 10, 50))}
@@ -685,12 +728,9 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
                 sectionId={section.id}
                 onSourceTextUpdate={handleSourceTextUpdate}
                 aiError={aiError}
+                reverseTransliterating={reverseTransliterating}
               />
-            </div>
-          </div>
 
-          <div style={styles.bottomRow}>
-            <div style={styles.transliterationColumn}>
               <div style={styles.panel}>
                 <div style={styles.panelHeader}>
                   <span>✏️</span>
@@ -733,50 +773,62 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
                     onKeyDown={handleExactLetterKeyDown}
                     onBlur={handleExactLetterBlur}
                     style={styles.transliterationArea}
-                    placeholder="e.g. මාතා → मාතා (letter-for-letter)"
+                    placeholder="e.g. transliteration (letter-for-letter)"
                     aria-label="Exact letter transliteration"
                   />
                 )}
 
                 <div style={styles.panelActions}>
                   {activeSourceText && !transliteration.text && !transliteration.loading && (
-                    <button onClick={() => handleTransliterate()} style={styles.generateBtn} disabled={transliterating}>
+                    <button
+                      onClick={() => handleTransliterate()}
+                      style={styles.generateBtn}
+                      disabled={transliterating}
+                    >
                       Generate with AI
                     </button>
                   )}
                   {transliteration.text && !transliteration.loading && (
-                    <button onClick={() => handleTransliterate(true)} style={styles.regenerateBtn} disabled={transliterating}>
+                    <button
+                      onClick={() => handleTransliterate(true)}
+                      style={styles.regenerateBtn}
+                      disabled={transliterating}
+                    >
                       Regenerate
                     </button>
                   )}
                 </div>
               </div>
             </div>
+          </div>
 
-            <div style={styles.translationColumn}>
-              <div style={styles.panel}>
-                <div style={styles.panelHeader}>
-                  <span>📝</span>
-                  <span style={styles.panelTitle}>Your Translation *</span>
-                  <button onClick={handleAutoTranslate} disabled={autoTranslating} style={styles.autoTranslateBtn}>
-                    {autoTranslating ? "Translating..." : "Auto Translate"}
-                  </button>
-                </div>
-                <textarea
-                  value={translatedText}
-                  onChange={(e) => updateText(e.target.value)}
-                  style={styles.translationArea}
-                  placeholder="Enter your translation here..."
-                  aria-label="Your translation"
-                />
+          <VerseAnalysisPanel
+            wordByWordMeaning={wordByWordMeaning}
+            fullMeaning={fullMeaning}
+            simplifiedMeaning={simplifiedMeaning}
+            loading={analyzing}
+            error={analyzeError}
+            onGenerate={handleAnalyze}
+          />
+
+          <div style={styles.translationColumn}>
+            <div style={styles.panel}>
+              <div style={styles.panelHeader}>
+                <span>📝</span>
+                <span style={styles.panelTitle}>Your Translation *</span>
               </div>
-
-              <DraftSaveIndicator visible={showSavedIndicator} />
-
-              {successMessage && (
-                <div style={styles.successBox}>{successMessage}</div>
-              )}
+              <textarea
+                value={translatedText}
+                onChange={(e) => updateText(e.target.value)}
+                style={styles.translationArea}
+                placeholder="Enter your translation here..."
+                aria-label="Your translation"
+              />
             </div>
+
+            <DraftSaveIndicator visible={showSavedIndicator} />
+
+            {successMessage && <div style={styles.successBox}>{successMessage}</div>}
           </div>
 
           {myTranslation && !myTranslation.isApproved && (
@@ -792,9 +844,7 @@ export const TranslateTab = ({ filters, isEditor = false }: TranslateTabProps) =
           )}
 
           <div style={styles.pageContext}>
-            <span style={{ fontSize: 13, color: "var(--muted)" }}>
-              Page {section.pageNumber}
-            </span>
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>Page {section.pageNumber}</span>
           </div>
         </>
       )}
@@ -950,16 +1000,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
   },
-  bottomRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 16,
-  },
-  transliterationColumn: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  },
   translationColumn: {
     display: "flex",
     flexDirection: "column",
@@ -1015,16 +1055,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--foreground)",
     cursor: "pointer",
     fontSize: 13,
-  },
-  autoTranslateBtn: {
-    marginLeft: "auto",
-    padding: "4px 12px",
-    border: "1px solid var(--border)",
-    borderRadius: 6,
-    background: "var(--surface)",
-    color: "var(--foreground)",
-    cursor: "pointer",
-    fontSize: 12,
   },
   transliterationArea: {
     padding: 12,

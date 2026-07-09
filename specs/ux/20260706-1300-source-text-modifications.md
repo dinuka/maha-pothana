@@ -78,6 +78,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ### 2.2 Desktop — Source Text Panel (AI Extraction States)
 
 **State: AI Extraction Complete**
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  📄 Source Text                                            │
@@ -96,6 +97,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ```
 
 **State: AI Extraction In Progress**
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  📄 Source Text                                            │
@@ -112,6 +114,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ```
 
 **State: AI Extraction Failed**
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  📄 Source Text                                            │
@@ -129,6 +132,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ```
 
 **State: No Extraction (OCR Only)**
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  📄 Source Text                                            │
@@ -146,6 +150,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ### 2.3 Desktop — Exact Letter Transliteration Panel (States)
 
 **State: AI Transliteration Available**
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  ✏️ Exact Letter Transliteration                           │
@@ -164,6 +169,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ```
 
 **State: Transliteration In Progress**
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  ✏️ Exact Letter Transliteration                           │
@@ -179,6 +185,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ```
 
 **State: Transliteration Failed**
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  ✏️ Exact Letter Transliteration                           │
@@ -195,6 +202,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ```
 
 **State: Manual Entry**
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │  ✏️ Exact Letter Transliteration                           │
@@ -231,6 +239,7 @@ This spec redesigns the Translate Tab layout to introduce a two-row, four-panel 
 ```
 
 Badge colors:
+
 - Green (`#16A34A`): confidence ≥ 0.9
 - Yellow (`#F59E0B`): confidence ≥ 0.7
 - Red (`#DC2626`): confidence < 0.7
@@ -652,25 +661,25 @@ Badge colors:
 
 ### 5.1 Breakpoint Strategy
 
-| Breakpoint | Width | Top Row | Bottom Row | Zoom Controls |
-| --- | --- | --- | --- | --- |
-| Mobile | < 768px | Stacked vertically | Stacked vertically | Overlay on image |
-| Tablet | 768–1024px | Side-by-side, collapsible | Side-by-side | Below image |
-| Desktop | > 1024px | Full side-by-side | Full side-by-side | Below image |
+| Breakpoint | Width      | Top Row                   | Bottom Row         | Zoom Controls    |
+| ---------- | ---------- | ------------------------- | ------------------ | ---------------- |
+| Mobile     | < 768px    | Stacked vertically        | Stacked vertically | Overlay on image |
+| Tablet     | 768–1024px | Side-by-side, collapsible | Side-by-side       | Below image      |
+| Desktop    | > 1024px   | Full side-by-side         | Full side-by-side  | Below image      |
 
 ### 5.2 Layout Adaptation — Translate Tab
 
-| Element | Desktop (>1024px) | Tablet (768–1024px) | Mobile (<768px) |
-| --- | --- | --- | --- |
-| Section image | 50% top row | 40% collapsible | Full width, 240px |
-| Source text | 50% top row, scrollable | 60% scrollable | Full width, below image |
-| Source text font | Scales with zoom | Scales with zoom | Fixed 14px |
-| Exact letter | 50% bottom row | 50% bottom row | Full width |
-| Translation editor | 50% bottom row | 50% bottom row | Full width |
-| Zoom controls | Below image, inline | Below image, inline | Overlay on image |
-| Extract button | Below source text | Below source text | Below source text |
-| Regenerate button | Below panel | Below panel | Below panel |
-| Confidence badge | Inline in panel header | Inline in panel header | Inline in panel header |
+| Element            | Desktop (>1024px)       | Tablet (768–1024px)    | Mobile (<768px)         |
+| ------------------ | ----------------------- | ---------------------- | ----------------------- |
+| Section image      | 50% top row             | 40% collapsible        | Full width, 240px       |
+| Source text        | 50% top row, scrollable | 60% scrollable         | Full width, below image |
+| Source text font   | Scales with zoom        | Scales with zoom       | Fixed 14px              |
+| Exact letter       | 50% bottom row          | 50% bottom row         | Full width              |
+| Translation editor | 50% bottom row          | 50% bottom row         | Full width              |
+| Zoom controls      | Below image, inline     | Below image, inline    | Overlay on image        |
+| Extract button     | Below source text       | Below source text      | Below source text       |
+| Regenerate button  | Below panel             | Below panel            | Below panel             |
+| Confidence badge   | Inline in panel header  | Inline in panel header | Inline in panel header  |
 
 ### 5.3 Touch Interactions (Mobile/Tablet)
 
@@ -820,17 +829,17 @@ Badge colors:
 
 ### 8.1 New Timing Guidelines
 
-| Interaction | Duration | Easing |
-| --- | --- | --- |
-| Shared zoom smooth scale | 150ms | ease |
-| Source text font scale with zoom | 150ms | ease |
-| Confidence badge appear | 200ms | ease-out |
-| Extraction status transition | 300ms | ease-in-out |
-| Regenerate button pulse | 600ms | ease-in-out |
-| Transliteration loading dots | 1.5s cycle | linear |
-| Bidirectional sync indicator | 200ms | ease-out |
-| Panel collapse/expand | 300ms | ease-in-out |
-| Skeleton shimmer | 1.5s infinite | linear |
+| Interaction                      | Duration      | Easing      |
+| -------------------------------- | ------------- | ----------- |
+| Shared zoom smooth scale         | 150ms         | ease        |
+| Source text font scale with zoom | 150ms         | ease        |
+| Confidence badge appear          | 200ms         | ease-out    |
+| Extraction status transition     | 300ms         | ease-in-out |
+| Regenerate button pulse          | 600ms         | ease-in-out |
+| Transliteration loading dots     | 1.5s cycle    | linear      |
+| Bidirectional sync indicator     | 200ms         | ease-out    |
+| Panel collapse/expand            | 300ms         | ease-in-out |
+| Skeleton shimmer                 | 1.5s infinite | linear      |
 
 ### 8.2 CSS Transition Classes
 
@@ -848,18 +857,27 @@ Badge colors:
 .confidence-badge-active {
   opacity: 1;
   transform: scale(1);
-  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
 }
 
 /* Extraction status indicator */
 .extraction-status {
-  transition: color 300ms ease-in-out, background-color 300ms ease-in-out;
+  transition:
+    color 300ms ease-in-out,
+    background-color 300ms ease-in-out;
 }
 
 /* Regenerate button pulse */
 @keyframes regenerate-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+  }
 }
 .regenerate-btn-stale {
   animation: regenerate-pulse 600ms ease-in-out;
@@ -867,22 +885,38 @@ Badge colors:
 
 /* Transliteration loading dots */
 @keyframes loading-dots {
-  0%, 20% { content: '.'; }
-  40% { content: '..'; }
-  60%, 100% { content: '...'; }
+  0%,
+  20% {
+    content: ".";
+  }
+  40% {
+    content: "..";
+  }
+  60%,
+  100% {
+    content: "...";
+  }
 }
 
 /* Panel collapse/expand */
 .panel-content {
   overflow: hidden;
-  transition: max-height 300ms ease-in-out, opacity 300ms ease-in-out;
+  transition:
+    max-height 300ms ease-in-out,
+    opacity 300ms ease-in-out;
 }
 
 /* Sync indicator flash */
 @keyframes sync-flash {
-  0% { background-color: transparent; }
-  50% { background-color: rgba(37, 99, 235, 0.1); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: rgba(37, 99, 235, 0.1);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 .sync-indicator {
   animation: sync-flash 200ms ease-out;
@@ -895,18 +929,18 @@ Badge colors:
 
 ### 9.1 Keyboard Navigation
 
-| Key | Context | Action |
-| --- | --- | --- |
-| `Tab` | Anywhere | Move focus through interactive elements |
-| `Shift+Tab` | Anywhere | Move focus backwards |
-| `Enter` / `Space` | Extract button | Trigger AI extraction |
-| `Enter` / `Space` | Regenerate button | Trigger regeneration |
-| `Enter` / `Space` | Source text textarea | Edit source text |
-| `Escape` | Source text textarea | Blur, discard changes |
-| `Ctrl+Enter` | Translation editor | Submit translation |
-| `+` / `-` | Image area | Zoom in/out |
-| `0` | Image area | Reset zoom to 100% |
-| `?` | Anywhere | Toggle keyboard shortcuts help |
+| Key               | Context              | Action                                  |
+| ----------------- | -------------------- | --------------------------------------- |
+| `Tab`             | Anywhere             | Move focus through interactive elements |
+| `Shift+Tab`       | Anywhere             | Move focus backwards                    |
+| `Enter` / `Space` | Extract button       | Trigger AI extraction                   |
+| `Enter` / `Space` | Regenerate button    | Trigger regeneration                    |
+| `Enter` / `Space` | Source text textarea | Edit source text                        |
+| `Escape`          | Source text textarea | Blur, discard changes                   |
+| `Ctrl+Enter`      | Translation editor   | Submit translation                      |
+| `+` / `-`         | Image area           | Zoom in/out                             |
+| `0`               | Image area           | Reset zoom to 100%                      |
+| `?`               | Anywhere             | Toggle keyboard shortcuts help          |
 
 ### 9.2 ARIA Attributes
 
@@ -923,9 +957,7 @@ Badge colors:
   <textarea id="source-text-input" aria-describedby="source-text-status">
     <!-- editable source text -->
   </textarea>
-  <span id="source-text-status" class="sr-only">
-    AI extracted text, confidence 94%
-  </span>
+  <span id="source-text-status" class="sr-only"> AI extracted text, confidence 94% </span>
 </div>
 
 <!-- Transliteration panel -->
@@ -938,9 +970,7 @@ Badge colors:
   </div>
   <label for="exact-letter-input">Exact letter transliteration</label>
   <input id="exact-letter-input" aria-describedby="exact-letter-status" />
-  <span id="exact-letter-status" class="sr-only">
-    AI generated transliteration
-  </span>
+  <span id="exact-letter-status" class="sr-only"> AI generated transliteration </span>
 </div>
 
 <!-- Confidence badge -->
@@ -955,9 +985,7 @@ Badge colors:
 </div>
 
 <!-- Regenerate button -->
-<button aria-label="Regenerate AI extraction for this section">
-  Regenerate
-</button>
+<button aria-label="Regenerate AI extraction for this section">Regenerate</button>
 
 <!-- Zoom controls -->
 <div role="group" aria-label="Zoom controls">
@@ -970,17 +998,17 @@ Badge colors:
 
 ### 9.3 Screen Reader Announcements
 
-| Event | Announcement |
-| --- | --- |
-| Section loaded | "Section loaded: Page 3, Section 2" |
-| AI extraction complete | "AI extraction complete. Confidence: 94 percent." |
-| AI extraction failed | "AI extraction failed. Using OCR text." |
-| AI extraction started | "AI extraction in progress..." |
-| Transliteration generated | "AI transliteration generated" |
-| Transliteration failed | "Transliteration unavailable. Enter manually." |
-| Source text updated | "Source text updated" |
-| Zoom changed | "Zoom: 120 percent" |
-| Regenerate clicked | "Regenerating extraction..." |
+| Event                     | Announcement                                      |
+| ------------------------- | ------------------------------------------------- |
+| Section loaded            | "Section loaded: Page 3, Section 2"               |
+| AI extraction complete    | "AI extraction complete. Confidence: 94 percent." |
+| AI extraction failed      | "AI extraction failed. Using OCR text."           |
+| AI extraction started     | "AI extraction in progress..."                    |
+| Transliteration generated | "AI transliteration generated"                    |
+| Transliteration failed    | "Transliteration unavailable. Enter manually."    |
+| Source text updated       | "Source text updated"                             |
+| Zoom changed              | "Zoom: 120 percent"                               |
+| Regenerate clicked        | "Regenerating extraction..."                      |
 
 ---
 
@@ -1077,11 +1105,11 @@ interface SourceTextPanelProps {
   extractionStatus: "extracted" | "pending" | "failed" | null
   confidence: number | null
   zoom: number
-  onSourceTextChange?: (text: string) => void  // bidirectional sync
+  onSourceTextChange?: (text: string) => void // bidirectional sync
   isEditor?: boolean
   bookId?: string
   pageNumber?: number
-  onExtract?: () => void  // editor-only
+  onExtract?: () => void // editor-only
 }
 ```
 

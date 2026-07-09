@@ -19,18 +19,18 @@ Implemented AI-powered text extraction and bidirectional transliteration for Ind
 
 ### Backend (apps/api)
 
-| File | Purpose |
-| --- | --- |
-| `app/services/ai_text.py` | OpenAI GPT-4o Vision + text integration for extraction and transliteration |
-| `app/schemas/extraction.py` | Pydantic models for extraction/transliteration API contracts |
-| `app/api/extraction.py` | 8 API endpoints for extraction, transliteration, source text updates, and status |
-| `app/tasks/extract_section_text.py` | Celery task for single-section AI text extraction |
-| `app/tasks/transliterate_section.py` | Celery task for transliteration with caching |
+| File                                 | Purpose                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| `app/services/ai_text.py`            | OpenAI GPT-4o Vision + text integration for extraction and transliteration       |
+| `app/schemas/extraction.py`          | Pydantic models for extraction/transliteration API contracts                     |
+| `app/api/extraction.py`              | 8 API endpoints for extraction, transliteration, source text updates, and status |
+| `app/tasks/extract_section_text.py`  | Celery task for single-section AI text extraction                                |
+| `app/tasks/transliterate_section.py` | Celery task for transliteration with caching                                     |
 
 ### Frontend (apps/web)
 
-| File | Purpose |
-| --- | --- |
+| File                                 | Purpose                                     |
+| ------------------------------------ | ------------------------------------------- |
 | `__tests__/SourceTextPanel.test.tsx` | 18 unit tests for SourceTextPanel component |
 
 ---
@@ -39,47 +39,47 @@ Implemented AI-powered text extraction and bidirectional transliteration for Ind
 
 ### Backend
 
-| File | Changes |
-| --- | --- |
-| `app/config.py` | Added `openai_api_key: str = ""` setting |
-| `app/db/indexes.py` | Added indexes for `ai_text_extractions`, `transliterations`, `system_config`, `redis_progress` |
-| `app/main.py` | Registered `extraction_router` |
+| File                     | Changes                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `app/config.py`          | Added `openai_api_key: str = ""` setting                                                                              |
+| `app/db/indexes.py`      | Added indexes for `ai_text_extractions`, `transliterations`, `system_config`, `redis_progress`                        |
+| `app/main.py`            | Registered `extraction_router`                                                                                        |
 | `app/schemas/section.py` | Added `aiExtractedText` and `extractionStatus` to `SectionResponse`; added `aiExtractedText` to `NextSectionResponse` |
-| `app/api/sections.py` | Updated `get_next_section` to return `aiExtractedText` |
-| `tests/conftest.py` | Added `ai_text_extractions`, `transliterations`, `system_config`, `redis_progress` to mock_db |
-| `tests/test_ai_text.py` | 18 test cases covering all extraction and transliteration endpoints |
+| `app/api/sections.py`    | Updated `get_next_section` to return `aiExtractedText`                                                                |
+| `tests/conftest.py`      | Added `ai_text_extractions`, `transliterations`, `system_config`, `redis_progress` to mock_db                         |
+| `tests/test_ai_text.py`  | 18 test cases covering all extraction and transliteration endpoints                                                   |
 
 ### Frontend
 
-| File | Changes |
-| --- | --- |
-| `app/translate/TranslateTab.tsx` | Rewritten with 2-row layout: top row (image + source text), bottom row (transliteration + translation). Added extraction trigger, transliteration generation, bidirectional sync |
-| `app/translate/components/SourceTextPanel.tsx` | Rewritten with AI/OCR toggle, confidence badge, extract/regenerate buttons, inline editing with debounced save |
-| `lib/api/translations.ts` | Added `aiExtractedText` to `NextSectionResponse` interface |
+| File                                           | Changes                                                                                                                                                                          |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/translate/TranslateTab.tsx`               | Rewritten with 2-row layout: top row (image + source text), bottom row (transliteration + translation). Added extraction trigger, transliteration generation, bidirectional sync |
+| `app/translate/components/SourceTextPanel.tsx` | Rewritten with AI/OCR toggle, confidence badge, extract/regenerate buttons, inline editing with debounced save                                                                   |
+| `lib/api/translations.ts`                      | Added `aiExtractedText` to `NextSectionResponse` interface                                                                                                                       |
 
 ---
 
 ## 4. API Endpoints Implemented
 
-| Method | Path | Status | Description |
-| --- | --- | --- | --- |
-| POST | `/api/sections/{sectionId}/extract` | 202 | Trigger single-section extraction |
-| POST | `/api/books/{bookId}/pages/{pageNum}/extract` | 202 | Batch extract all sections on a page |
-| POST | `/api/books/{bookId}/extract` | 202 | Batch extract all sections in a book |
-| GET | `/api/sections/{sectionId}/extraction` | 200 | Fetch extraction result with confidence |
-| POST | `/api/sections/{sectionId}/transliterate` | 200/202 | Generate transliteration (cached or queued) |
-| GET | `/api/sections/{sectionId}/transliterations` | 200 | Fetch cached transliterations |
-| PUT | `/api/sections/{sectionId}/source-text` | 200 | Update source text, invalidate transliteration cache |
-| GET | `/api/books/{bookId}/extraction/status` | 200 | Batch extraction progress |
+| Method | Path                                          | Status  | Description                                          |
+| ------ | --------------------------------------------- | ------- | ---------------------------------------------------- |
+| POST   | `/api/sections/{sectionId}/extract`           | 202     | Trigger single-section extraction                    |
+| POST   | `/api/books/{bookId}/pages/{pageNum}/extract` | 202     | Batch extract all sections on a page                 |
+| POST   | `/api/books/{bookId}/extract`                 | 202     | Batch extract all sections in a book                 |
+| GET    | `/api/sections/{sectionId}/extraction`        | 200     | Fetch extraction result with confidence              |
+| POST   | `/api/sections/{sectionId}/transliterate`     | 200/202 | Generate transliteration (cached or queued)          |
+| GET    | `/api/sections/{sectionId}/transliterations`  | 200     | Fetch cached transliterations                        |
+| PUT    | `/api/sections/{sectionId}/source-text`       | 200     | Update source text, invalidate transliteration cache |
+| GET    | `/api/books/{bookId}/extraction/status`       | 200     | Batch extraction progress                            |
 
 ---
 
 ## 5. Celery Tasks
 
-| Task | Description |
-| --- | --- |
-| `extract_section_text` | Downloads cropped image from MinIO, sends to GPT-4o Vision, saves to `ai_text_extractions` collection, updates `Section.aiExtractedText` |
-| `transliterate_section` | Checks cache first, then calls GPT-4o for script conversion, saves to `transliterations` collection |
+| Task                    | Description                                                                                                                              |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `extract_section_text`  | Downloads cropped image from MinIO, sends to GPT-4o Vision, saves to `ai_text_extractions` collection, updates `Section.aiExtractedText` |
+| `transliterate_section` | Checks cache first, then calls GPT-4o for script conversion, saves to `transliterations` collection                                      |
 
 Both tasks follow existing patterns from `crop_sections.py` using `run_async()` for async Motor calls in sync Celery workers.
 
@@ -155,12 +155,12 @@ tsc --noEmit — 0 errors
 
 ## 9. Database Collections
 
-| Collection | Index | Purpose |
-| --- | --- | --- |
-| `ai_text_extractions` | `{ sectionId: 1 }` unique | One extraction per section, idempotent |
-| `transliterations` | `{ sectionId: 1, targetScript: 1 }` unique | Cached transliterations per section+language |
-| `system_config` | `{ key: 1 }` unique | Key-value config store for admin settings |
-| `redis_progress` | `{ bookId: 1 }` | Batch extraction progress tracking |
+| Collection            | Index                                      | Purpose                                      |
+| --------------------- | ------------------------------------------ | -------------------------------------------- |
+| `ai_text_extractions` | `{ sectionId: 1 }` unique                  | One extraction per section, idempotent       |
+| `transliterations`    | `{ sectionId: 1, targetScript: 1 }` unique | Cached transliterations per section+language |
+| `system_config`       | `{ key: 1 }` unique                        | Key-value config store for admin settings    |
+| `redis_progress`      | `{ bookId: 1 }`                            | Batch extraction progress tracking           |
 
 ---
 

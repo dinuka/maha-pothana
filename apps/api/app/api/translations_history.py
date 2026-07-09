@@ -14,7 +14,6 @@ router = APIRouter()
 async def get_translation_history(
     bookId: str = Query(...),
     translatorId: str | None = Query(None),
-    language: str | None = Query(None),
     page_num: int | None = Query(None, alias="page"),
     status: str | None = Query(None),
     cursor: str | None = Query(None),
@@ -22,22 +21,24 @@ async def get_translation_history(
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    # Verify book exists
     book = await db.books.find_one({"_id": ObjectId(bookId)})
     if not book:
         raise HTTPException(404, "Book not found")
 
-    # Build match conditions
-    match: dict = {}
+    match: dict = {"bookId": bookId}
 
     if status == "approved":
-        match["isApproved"] = True
+        match["action"] = "APPROVED"
     elif status == "rejected":
-        match["isApproved"] = False
+        match["action"] = "REJECTED"
     elif status == "submitted":
-        # Translations that exist but haven't been approved or rejected
-        # isApproved is False and there's a translation
-        match["isApproved"] = False
+        match["action"] = "SUBMITTED"
+
+    if translatorId:
+        match["translatorId"] = translatorId
+
+    if page_num is not None:
+        match["pageNumber"] = page_num
 
     if cursor:
         try:
@@ -46,115 +47,28 @@ async def get_translation_history(
         except ValueError:
             pass
 
-    # Build pipeline
-    pipeline: list[dict] = []
-
-    if match:
-        pipeline.append({"$match": match})
-
-    # Join with sections
-    pipeline.extend([
-        {"$lookup": {
-            "from": "sections",
-            "localField": "section.id",
-            "foreignField": "_id",
-            "as": "sec",
-        }},
-        {"$unwind": {"path": "$sec", "preserveNullAndEmptyArrays": True}},
-    ])
-
-    # Join with pages
-    pipeline.extend([
-        {"$lookup": {
-            "from": "pages",
-            "localField": "sec.page.id",
-            "foreignField": "_id",
-            "as": "pg",
-        }},
-        {"$unwind": {"path": "$pg", "preserveNullAndEmptyArrays": True}},
-    ])
-
-    # Filter by book
-    pipeline.append({"$match": {"pg.book.id": bookId}})
-
-    # Apply translator filter
-    if translatorId:
-        pipeline.append({"$match": {"translator.id": translatorId}})
-
-    # Apply page number filter
-    if page_num is not None:
-        pipeline.append({"$match": {"pg.pageNumber": page_num}})
-
-    # Apply language filter (match against book's translateLanguages)
-    if language:
-        # We can't directly filter translations by language since translations
-        # don't store target language. We'll filter by checking if the book
-        # has the language and the translation text contains it.
-        # For now, skip language filter on translations since it's not stored.
-        pass
-
-    # Join with users for translator name
-    pipeline.extend([
-        {"$lookup": {
-            "from": "users",
-            "localField": "translator.id",
-            "foreignField": "_id",
-            "as": "translatorUser",
-        }},
-        {"$unwind": {"path": "$translatorUser", "preserveNullAndEmptyArrays": True}},
-    ])
-
-    # Join with users for performedBy name
-    pipeline.extend([
-        {"$lookup": {
-            "from": "users",
-            "localField": "approvedBy.id",
-            "foreignField": "_id",
-            "as": "performerUser",
-        }},
-        {"$unwind": {"path": "$performerUser", "preserveNullAndEmptyArrays": True}},
-    ])
-
-    # Sort and limit
-    pipeline.extend([
-        {"$sort": {"createdAt": -1}},
-        {"$limit": limit + 1},
-    ])
-
-    cursor_result = db.translations.aggregate(pipeline)
-    items = await cursor_result.to_list(length=limit + 1)
+    items_cursor = db.translation_activity.find(match).sort("createdAt", -1).limit(limit + 1)
+    items = await items_cursor.to_list(length=limit + 1)
 
     has_more = len(items) > limit
     items = items[:limit]
 
-    result_items = []
-    for item in items:
-        # Determine action based on isApproved
-        if item.get("isApproved"):
-            action = "APPROVED"
-        elif item.get("approvedBy"):
-            action = "REJECTED"
-        else:
-            action = "SUBMITTED"
-
-        translator_user = item.get("translatorUser")
-        performer_user = item.get("performerUser")
-        sec = item.get("sec", {})
-        pg = item.get("pg", {})
-
-        result_items.append(TranslationHistoryItem(
-            translationId=str(item["_id"]),
-            sectionId=item.get("section", {}).get("id", ""),
-            pageNumber=pg.get("pageNumber", 0) if pg else 0,
-            sectionOrder=sec.get("sectionOrder", 0) if sec else 0,
-            translatorId=item.get("translator", {}).get("id", ""),
-            translatorName=translator_user.get("name", "Unknown") if translator_user else "Unknown",
-            translatedText=item.get("translatedText", ""),
-            action=action,
-            performedBy=item.get("approvedBy", {}).get("id") if item.get("approvedBy") else None,
-            performedByName=performer_user.get("name") if performer_user else None,
-            createdAt=item.get("createdAt", datetime.min),
-        ))
+    result_items = [
+        TranslationHistoryItem(
+            translationId=item["translationId"],
+            sectionId=item["sectionId"],
+            pageNumber=item["pageNumber"],
+            sectionOrder=item["sectionOrder"],
+            translatorId=item["translatorId"],
+            translatorName=item["translatorName"],
+            translatedText=item["translatedText"],
+            action=item["action"],
+            performedBy=item.get("performedBy"),
+            performedByName=item.get("performedByName"),
+            createdAt=item["createdAt"],
+        )
+        for item in items
+    ]
 
     next_cursor = None
     if has_more and result_items:

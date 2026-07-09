@@ -17,6 +17,9 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.translations.create_index([("section.id", 1), ("translator.id", 1)], unique=True)
     await db.translations.create_index([("section.id", 1), ("isApproved", 1)])
 
+    await db.translation_activity.create_index([("bookId", 1), ("createdAt", -1)])
+    await db.translation_activity.create_index([("bookId", 1), ("action", 1), ("createdAt", -1)])
+
     await db.comments.create_index([("section.id", 1), ("createdAt", 1)])
 
     await db.invitations.create_index([("book.id", 1), ("user.id", 1)], unique=True)
@@ -40,3 +43,5 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.system_config.create_index("key", unique=True)
 
     await db.redis_progress.create_index("bookId")
+
+    await db.book_stats.create_index("bookId", unique=True)

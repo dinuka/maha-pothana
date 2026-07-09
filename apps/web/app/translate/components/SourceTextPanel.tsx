@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
+import Link from "next/link"
 import { apiFetchBrowser } from "@/lib/apiClientBrowser"
 
 interface SourceTextPanelProps {
@@ -9,16 +10,17 @@ interface SourceTextPanelProps {
   extractionStatus?: "extracted" | "pending" | "failed" | null
   confidence?: number | null
   isEditor?: boolean
-  bookId?: string
-  pageNumber?: number
   zoom: number
   onZoomIn?: () => void
   onZoomOut?: () => void
   onZoomReset?: () => void
-  onExtract?: () => void
+  onExtract?: (force?: boolean) => void
   sectionId?: string
   onSourceTextUpdate?: (text: string, source: "ai" | "ocr") => void
   aiError?: string | null
+  reverseTransliterating?: boolean
+  bookId?: string
+  pageNumber?: number
 }
 
 const CONFIDENCE_GREEN = "#16A34A"
@@ -38,8 +40,6 @@ export const SourceTextPanel = ({
   extractionStatus,
   confidence,
   isEditor = false,
-  bookId,
-  pageNumber,
   zoom,
   onZoomIn,
   onZoomOut,
@@ -48,6 +48,9 @@ export const SourceTextPanel = ({
   sectionId,
   onSourceTextUpdate,
   aiError,
+  reverseTransliterating = false,
+  bookId,
+  pageNumber,
 }: SourceTextPanelProps) => {
   const [showAI, setShowAI] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -103,10 +106,15 @@ export const SourceTextPanel = ({
       const el = scrollRef.current
       if (!el) return
       setIsDragging(true)
-      dragStart.current = { x: e.clientX, y: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop }
+      dragStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        scrollLeft: el.scrollLeft,
+        scrollTop: el.scrollTop,
+      }
       e.preventDefault()
     },
-    [editing]
+    [editing],
   )
 
   const handleMouseMove = useCallback(
@@ -119,7 +127,7 @@ export const SourceTextPanel = ({
       el.scrollLeft = dragStart.current.scrollLeft - dx
       el.scrollTop = dragStart.current.scrollTop - dy
     },
-    [isDragging]
+    [isDragging],
   )
 
   const handleMouseUp = useCallback(() => {
@@ -136,18 +144,10 @@ export const SourceTextPanel = ({
 
   const getStatusBadge = () => {
     if (extractionStatus === "pending") {
-      return (
-        <span style={{ ...styles.badge, ...styles.badgePending }}>
-          Extracting...
-        </span>
-      )
+      return <span style={{ ...styles.badge, ...styles.badgePending }}>Extracting...</span>
     }
     if (extractionStatus === "failed") {
-      return (
-        <span style={{ ...styles.badge, ...styles.badgeFailed }}>
-          Extraction failed
-        </span>
-      )
+      return <span style={{ ...styles.badge, ...styles.badgeFailed }}>Extraction failed</span>
     }
     if (showAI && aiExtractedText && confidence != null) {
       return (
@@ -162,11 +162,7 @@ export const SourceTextPanel = ({
         </span>
       )
     }
-    return (
-      <span style={{ ...styles.badge, background: CONFIDENCE_GRAY, color: "#fff" }}>
-        OCR
-      </span>
-    )
+    return <span style={{ ...styles.badge, background: CONFIDENCE_GRAY, color: "#fff" }}>OCR</span>
   }
 
   return (
@@ -175,6 +171,11 @@ export const SourceTextPanel = ({
         <span style={styles.icon}>📄</span>
         <span style={styles.title}>Source Text</span>
         {getStatusBadge()}
+        {reverseTransliterating && (
+          <span style={{ ...styles.badge, ...styles.badgePending }}>
+            Reverse transliterating...
+          </span>
+        )}
       </div>
 
       {aiExtractedText && originalText && (
@@ -200,6 +201,21 @@ export const SourceTextPanel = ({
         </div>
       )}
 
+      {onZoomIn && onZoomOut && onZoomReset && displayText && !editing && (
+        <div style={styles.zoomControls}>
+          <button onClick={onZoomOut} style={styles.zoomBtn} aria-label="Zoom out">
+            −
+          </button>
+          <span style={{ fontSize: 13, color: "var(--foreground)" }}>{zoom}%</span>
+          <button onClick={onZoomIn} style={styles.zoomBtn} aria-label="Zoom in">
+            +
+          </button>
+          <button onClick={onZoomReset} style={styles.zoomBtn} aria-label="Reset zoom">
+            ⟳
+          </button>
+        </div>
+      )}
+
       {editing ? (
         <div style={styles.editContainer}>
           <textarea
@@ -216,11 +232,7 @@ export const SourceTextPanel = ({
             <button onClick={handleEditCancel} style={styles.cancelBtn}>
               Cancel
             </button>
-            <button
-              onClick={handleSaveEdit}
-              disabled={saving}
-              style={styles.saveBtn}
-            >
+            <button onClick={handleSaveEdit} disabled={saving} style={styles.saveBtn}>
               {saving ? "Saving..." : "Save"}
             </button>
           </div>
@@ -247,18 +259,7 @@ export const SourceTextPanel = ({
           </div>
         </div>
       ) : (
-        <div style={styles.fallback}>
-          Original text not available — use the image above
-        </div>
-      )}
-
-      {onZoomIn && onZoomOut && onZoomReset && displayText && !editing && (
-        <div style={styles.zoomControls}>
-          <button onClick={onZoomOut} style={styles.zoomBtn} aria-label="Zoom out">−</button>
-          <span style={{ fontSize: 13, color: "var(--foreground)" }}>{zoom}%</span>
-          <button onClick={onZoomIn} style={styles.zoomBtn} aria-label="Zoom in">+</button>
-          <button onClick={onZoomReset} style={styles.zoomBtn} aria-label="Reset zoom">⟳</button>
-        </div>
+        <div style={styles.fallback}>Original text not available — use the image above</div>
       )}
 
       <div style={styles.actions}>
@@ -274,41 +275,53 @@ export const SourceTextPanel = ({
             <span>AI extraction in progress...</span>
           </div>
         )}
+        {reverseTransliterating && (
+          <div style={styles.extractingIndicator}>
+            <div style={styles.miniSpinner} />
+            <span>Reverse transliterating, please wait...</span>
+          </div>
+        )}
         {extractionStatus === "failed" && isEditor && (
           <div style={styles.failedIndicator}>
             <span>Extraction failed — using OCR text</span>
             {onExtract && (
-              <button onClick={onExtract} style={styles.retryBtn}>
+              <button onClick={() => onExtract()} style={styles.retryBtn}>
                 Retry Extraction
               </button>
             )}
           </div>
         )}
         {!aiExtractedText && !extractionStatus && isEditor && onExtract && (
-          <button onClick={onExtract} style={styles.extractBtn}>
+          <button onClick={() => onExtract()} style={styles.extractBtn}>
             Extract Text
           </button>
         )}
         {aiExtractedText && isEditor && onExtract && (
-          <button onClick={onExtract} style={styles.regenerateBtn}>
+          <button onClick={() => onExtract(true)} style={styles.regenerateBtn}>
             Regenerate
           </button>
         )}
         {displayText && !editing && (
-          <button onClick={handleEditStart} style={styles.editBtn}>
+          <button
+            onClick={handleEditStart}
+            disabled={reverseTransliterating}
+            style={{
+              ...styles.editBtn,
+              ...(reverseTransliterating ? styles.editBtnDisabled : {}),
+            }}
+          >
             Edit
           </button>
         )}
+        {isEditor && bookId && pageNumber != null && (
+          <Link
+            href={`/books/${bookId}/pages/${pageNumber}`}
+            style={styles.pageLink}
+          >
+            Edit original text →
+          </Link>
+        )}
       </div>
-
-      {isEditor && bookId && pageNumber && (
-        <a
-          href={`/books/${bookId}/pages/${pageNumber}`}
-          style={styles.editLink}
-        >
-          Edit original text →
-        </a>
-      )}
     </div>
   )
 }
@@ -490,6 +503,17 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     fontSize: 13,
   },
+  editBtnDisabled: {
+    opacity: 0.6,
+    cursor: "not-allowed",
+  },
+  pageLink: {
+    fontSize: 13,
+    color: "var(--primary)",
+    textDecoration: "underline",
+    cursor: "pointer",
+    marginLeft: "auto",
+  },
   retryBtn: {
     padding: "4px 12px",
     border: "none",
@@ -537,10 +561,5 @@ const styles: Record<string, React.CSSProperties> = {
   aiErrorIcon: {
     fontSize: 16,
     flexShrink: 0,
-  },
-  editLink: {
-    fontSize: 12,
-    color: "var(--primary)",
-    textDecoration: "none",
   },
 }

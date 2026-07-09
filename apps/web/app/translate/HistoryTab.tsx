@@ -81,7 +81,7 @@ export const HistoryTab = ({ filters, onSectionClick }: HistoryTabProps) => {
           fetchHistory(false)
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     )
 
     observer.observe(el)
@@ -115,25 +115,17 @@ export const HistoryTab = ({ filters, onSectionClick }: HistoryTabProps) => {
       <div style={styles.emptyState}>
         <div style={styles.emptyIcon}>📝</div>
         <div style={styles.emptyTitle}>No translations yet</div>
-        <div style={styles.emptyDesc}>
-          Start translating to see your submission history here.
-        </div>
+        <div style={styles.emptyDesc}>Start translating to see your submission history here.</div>
       </div>
     )
   }
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        Translation History
-      </div>
+      <div style={styles.header}>Translation History</div>
       <div style={styles.list}>
         {items.map((item) => (
-          <HistoryItem
-            key={item.translationId}
-            item={item}
-            onClick={onSectionClick}
-          />
+          <HistoryItem key={item.translationId} item={item} onClick={onSectionClick} />
         ))}
         <div ref={observerRef} style={styles.observer} />
         {loadingMore && (
@@ -142,9 +134,7 @@ export const HistoryTab = ({ filters, onSectionClick }: HistoryTabProps) => {
             <span>Loading more translations...</span>
           </div>
         )}
-        {!hasMore && items.length > 0 && (
-          <div style={styles.endOfList}>End of history</div>
-        )}
+        {!hasMore && items.length > 0 && <div style={styles.endOfList}>End of history</div>}
       </div>
     </div>
   )

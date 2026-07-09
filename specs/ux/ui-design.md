@@ -6,6 +6,7 @@
 - **Canvas-first interaction** — Konva.js provides interactive overlay for section editing
 - **Progressive disclosure** — Complex features revealed as needed, not all at once
 - **Context-rich translation** — Translators always see surrounding page context
+- **Forgiving input** — Undo/redo, draw cancellation, and confirmation safeguards prevent data loss
 
 ## Layout Structure
 
@@ -51,9 +52,6 @@
 └──────────────┴───────────────────────────────────┘
 ```
 
-<<<<<<< Updated upstream
-### Translation Page Layout
-=======
 ### Page Editor Layout (Detailed)
 
 ```
@@ -97,7 +95,6 @@
 ### Translation Page Layout (Redesigned)
 
 The translation page uses a **tabbed layout** with three tabs: Translate, History, and Stats. Filters are persisted in URL query params and are independent between tabs. The Translate Tab uses a **two-row, four-panel design**: top row pairs image + source text (shared zoom), bottom row pairs exact letter transliteration + translation.
->>>>>>> Stashed changes
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -196,46 +193,44 @@ The translation page uses a **tabbed layout** with three tabs: Translate, Histor
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-## Key Interactions
+## Detailed Interaction Patterns
 
 ### 1. Section Annotation Editor (Konva.js)
 
-**States:**
+#### Image Loading
 
-- **Loading** — Skeleton placeholder while page image loads
-- **Detecting** — Spinner overlay with "Detecting sections..." text
-- **Edit mode** — Colored rectangles overlaid on page image:
-  - Header = blue
-  - Paragraph = green
-  - Footnote = orange
-  - Page Number = gray
-  - Other = purple
-- **Selected state** — Selected rectangle has thicker border + resize handles at corners/edges
-- **Hover state** — Rectangle highlights with slight opacity change + tooltip showing type
-- **Empty state** — "No sections detected. Draw rectangles manually or retry detection."
-- **Error state** — "Detection failed. [Retry]" button
+| State        | Visual                                                                                                  | Description                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **Loading**  | Skeleton placeholder (aspect-ratio matching container) + spinner icon with "Loading page image..."      | While `HTMLImageElement` loads from presigned S3 URL    |
+| **Loaded**   | Page image rendered as `<Rect fillPatternImage={imgElement}>` or `<Konva.Image>` covering full stage    | Image element stored in `useState` and passed to canvas |
+| **No image** | Centered message: "No page image available" + subtitle "Upload a book and process it to see pages here" | When `pageImageUrl` is null/undefined                   |
+| **Error**    | Centered message: "Failed to load page image" + [Retry] button                                          | When `img.onerror` fires                                |
 
-**Interactions:**
+#### Section Operations
 
-- Click rectangle → select it (show properties in sidebar)
-- Drag rectangle → move it
-- Drag corner handle → resize
-- Delete key / trash icon → remove selected rectangle
-- Click empty area → deselect current
-- Draw new: click "Add Section" button, then click-drag on canvas
-- Double-click rectangle → edit type selector
-- Scroll wheel → zoom in/out of canvas
-- Pan: spacebar + drag to pan around zoomed canvas
+| State         | Visual                                                                                                              | Description                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **Empty**     | Canvas shows just the page image. Bottom overlay hint: "No sections yet. Click 'Detect Sections' or draw manually." | No sections loaded                    |
+| **Detected**  | Colored rectangles overlaid on image with type labels                                                               | Sections loaded from API or detection |
+| **Selected**  | Rectangle has thicker white border (2px), Transform handles at corners/edges, type selector appears in toolbar      | User clicks a rectangle               |
+| **Hover**     | Rectangle opacity increases (fill becomes more opaque), cursor becomes pointer                                      | Mouse hovers over a rectangle         |
+| **Drawing**   | Crosshair cursor, dashed preview rectangle follows mouse on drag, "Cancel Draw" button highlighted                  | Toggle draw mode active               |
+| **Detecting** | Semi-transparent overlay with spinner + "Detecting sections..." message, all toolbar buttons disabled except zoom   | Detection API in progress             |
+| **Saving**    | "Confirm Sections" button shows spinner, all edit buttons disabled                                                  | Save API in progress                  |
 
-**Responses:**
+#### Section Type Color Scheme
 
-- Rectangle changes color briefly on successful action
-- Snap-to-grid when resizing (optional, toggleable)
-- Undo/Redo support via Ctrl+Z / Ctrl+Shift+Z
+| Type          | Hex Color              | Fill Opacity   | Label           | Description      |
+| ------------- | ---------------------- | -------------- | --------------- | ---------------- |
+| HEADER        | `#3B82F6` (blue-500)   | 25% (`40` hex) | `HEADER`        | Book/page titles |
+| PARAGRAPH     | `#22C55E` (green-500)  | 25%            | `PARAGRAPH`     | Body text        |
+| FOOTNOTE      | `#F97316` (orange-500) | 25%            | `FOOTNOTE`      | Footnotes        |
+| IMAGE_CAPTION | `#A855F7` (purple-500) | 25%            | `IMAGE_CAPTION` | Image captions   |
+| PAGE_NUMBER   | `#6B7280` (gray-500)   | 25%            | `PAGE_NUMBER`   | Page numbers     |
+| OTHER         | `#8B5CF6` (violet-500) | 25%            | `OTHER`         | Miscellaneous    |
 
-<<<<<<< Updated upstream
 ### 2. Translation Interface
-=======
+
 - Stroke color matches fill color
 - Stroke width: 1px (unselected), 2px white (selected)
 - Type label text: 11px bold, same color as fill, positioned at top-left of rectangle with 4px offset
@@ -307,16 +302,84 @@ The translation page uses a **tabbed layout** with three tabs: Translate, Histor
 5. **On failure**: Error state "Detection failed" + [Retry Detection] button. Page status `DETECTION_FAILED`
 6. After initial confirmation, "Re-detect Sections" button is available for re-running detection
 
+### 4. Translation Interface
+
+#### Toolbar Icons & Controls
+
+| #   | Control          | Type           | Icon/Text                              | Behavior                                                              |
+| --- | ---------------- | -------------- | -------------------------------------- | --------------------------------------------------------------------- |
+| 1   | Add Section      | Toggle button  | `[📐 Add Section]` / `[✕ Cancel Draw]` | Toggles draw mode. Active state: primary color background             |
+| 2   | Delete           | Action button  | `[🗑 Delete]`                          | Deletes selected section. Disabled when no selection                  |
+| 3   | Type Selector    | Dropdown       | `[Type: PARAGRAPH ▼]`                  | Only visible when section selected. Changes section type              |
+| 4   | Undo             | Action button  | `[↩]`                                  | Reverses last action. Disabled when undo stack empty                  |
+| 5   | Redo             | Action button  | `[↪]`                                  | Reapplies last undone action. Disabled when redo stack empty          |
+| 6   | Detect Sections  | Action button  | `[✨ Detect Sections]`                 | Triggers ML-based section detection. Disabled during detection/saving |
+| 7   | Zoom Out         | Action button  | `[−]`                                  | Decreases zoom by 10% (min 50%)                                       |
+| 8   | Zoom Level       | Label          | `100%`                                 | Displays current zoom percentage                                      |
+| 9   | Zoom In          | Action button  | `[+]`                                  | Increases zoom by 10% (max 300%)                                      |
+| 10  | Confirm Sections | Primary action | `[✓ Confirm Sections]`                 | Saves all sections to API. Shows spinner while saving                 |
+
+#### Keyboard Shortcuts
+
+| Key                       | Context        | Action                                      |
+| ------------------------- | -------------- | ------------------------------------------- |
+| `Delete` / `Backspace`    | Canvas focused | Delete selected section                     |
+| `Ctrl+Z`                  | Anywhere       | Undo                                        |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Anywhere       | Redo                                        |
+| `Escape`                  | Canvas focused | Deselect current section / Cancel draw mode |
+| `+` / `=`                 | Canvas focused | Zoom in                                     |
+| `-`                       | Canvas focused | Zoom out                                    |
+| `Ctrl+S`                  | Anywhere       | Save/confirm sections                       |
+| `D`                       | Canvas focused | Toggle draw mode                            |
+
+- Keyboard shortcuts only fire when the canvas area is focused or no text input is active
+- Tooltips on toolbar buttons show the associated shortcut (e.g., "Delete (Delete)")
+- A small `[?]` help button in the toolbar can toggle a keyboard shortcut cheat sheet overlay
+
+#### Undo/Redo System
+
+- Internal history stack (array of section snapshots) kept in component state
+- Each undoable action (add, delete, move, resize, type change) pushes current state to undo stack
+- Redo stack accumulates undone states; cleared when a new action is performed
+- Stacks are cleared when sections are confirmed/saved to API
+- Maximum stack depth: 50 actions (to prevent memory issues)
+
+#### Draw Mode
+
+1. User clicks "Add Section" button → button highlights, cursor changes to crosshair
+2. User clicks and drags on canvas → dashed preview rectangle follows cursor
+3. On mouseup, if rectangle area > 10x10px, new section is created with type PARAGRAPH
+4. New section is auto-selected with Transform handles
+5. Draw mode automatically exits after successful draw
+6. User can press Escape or click "Cancel Draw" to exit without drawing
+
+### 2. Confirmation Flow
+
+1. User modifies sections (add, delete, move, resize, change type)
+2. User clicks "Confirm Sections" (or presses Ctrl+S)
+3. Button shows spinner, all edit controls disabled
+4. Frontend sends raw array of sections `[{ id, sectionOrder, type, x, y, width, height }]` via `PUT /api/pages/{pageId}/sections`
+5. **On success**: Toast "Sections confirmed!" → Canvas enters read-only confirmation state → "Re-detect Sections" button appears
+6. **On failure**: Error toast "Failed to save sections" + [Retry] button
+
+### 3. Section Detection Flow
+
+1. User clicks "Detect Sections" (or detection auto-runs on page load)
+2. Loading overlay appears: "Detecting sections..." with spinner
+3. Backend runs ML detection (LayoutParser) asynchronously via Celery
+4. On completion, frontend refetches page data → sections appear as colored rectangles
+5. **On failure**: Error state "Detection failed" + [Retry Detection] button. Page status `DETECTION_FAILED`
+6. After initial confirmation, "Re-detect Sections" button is available for re-running detection
+
 ### 4. Translation Interface (Redesigned)
->>>>>>> Stashed changes
 
 #### Tab System
 
-| Tab | Label | Visibility | Default |
-| --- | --- | --- | --- |
-| Translate | "Translate" | All roles | Yes |
-| History | "History" | All roles | No |
-| Stats | "Stats" | Editors, Super Admin only | No |
+| Tab       | Label       | Visibility                | Default |
+| --------- | ----------- | ------------------------- | ------- |
+| Translate | "Translate" | All roles                 | Yes     |
+| History   | "History"   | All roles                 | No      |
+| Stats     | "Stats"     | Editors, Super Admin only | No      |
 
 - Active tab indicated by underline + bold text
 - Tab state persisted in URL: `?tab=translate`, `?tab=history`, `?tab=stats`
@@ -324,26 +387,26 @@ The translation page uses a **tabbed layout** with three tabs: Translate, Histor
 
 #### Translate Tab States
 
-| State | Visual | Description |
-| --- | --- | --- |
-| **Idle** | Empty state with "Select a section to translate" message + auto-loads first section on mount | No section loaded yet |
-| **Loading** | Skeleton placeholder for all four panels (image, source text, transliteration, translation), spinner overlay | Section data loading |
-| **Ready** | Two-row layout: image + source text top, transliteration + translation bottom | Section loaded, all panels ready |
-| **Ready (AI text)** | Source text panel shows AI-extracted text with green confidence badge (≥0.9) | AI extraction available |
-| **Ready (OCR text)** | Source text panel shows OCR text with gray "OCR" badge | No AI extraction, using fallback |
-| **Extracting** | Source text panel shows "Extracting..." with OCR text as fallback, spinner | AI extraction in progress |
-| **Extraction failed** | Source text panel shows OCR text with red "Extraction failed" badge + "Retry" button | AI extraction failed |
-| **Has draft** | Translation editor prefilled with saved draft text, "Draft saved ✓" indicator | Existing draft loaded from backend |
-| **Has transliteration** | Exact letter panel shows AI-generated transliteration with green badge | Transliteration cached |
-| **Generating transliteration** | Exact letter panel shows "Generating..." spinner | Transliteration in progress |
-| **Transliteration unavailable** | Exact letter panel shows "Transliteration unavailable — enter manually" | Transliteration failed |
-| **Has previous submission** | "My previous submission" panel below editor with pending text + "Edit" button | Translator already submitted, pending review |
-| **Has approved translation** | "Approved Translation" panel shows the approved text (read-only) | Section already has an approved translation |
-| **Saving** | Spinner on Submit button, all inputs disabled | Translation being saved |
-| **Saved** | Green toast "Translation saved!" + auto-loads next section | Save succeeded |
-| **Complete** | Centered "All sections translated!" with checkmark icon | Queue empty for current filters |
-| **Error** | Error message + [Retry] button | API call failed |
-| **No sections** | "No sections match your filters. Try adjusting the filters." | Filters return empty results |
+| State                           | Visual                                                                                                       | Description                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| **Idle**                        | Empty state with "Select a section to translate" message + auto-loads first section on mount                 | No section loaded yet                        |
+| **Loading**                     | Skeleton placeholder for all four panels (image, source text, transliteration, translation), spinner overlay | Section data loading                         |
+| **Ready**                       | Two-row layout: image + source text top, transliteration + translation bottom                                | Section loaded, all panels ready             |
+| **Ready (AI text)**             | Source text panel shows AI-extracted text with green confidence badge (≥0.9)                                 | AI extraction available                      |
+| **Ready (OCR text)**            | Source text panel shows OCR text with gray "OCR" badge                                                       | No AI extraction, using fallback             |
+| **Extracting**                  | Source text panel shows "Extracting..." with OCR text as fallback, spinner                                   | AI extraction in progress                    |
+| **Extraction failed**           | Source text panel shows OCR text with red "Extraction failed" badge + "Retry" button                         | AI extraction failed                         |
+| **Has draft**                   | Translation editor prefilled with saved draft text, "Draft saved ✓" indicator                                | Existing draft loaded from backend           |
+| **Has transliteration**         | Exact letter panel shows AI-generated transliteration with green badge                                       | Transliteration cached                       |
+| **Generating transliteration**  | Exact letter panel shows "Generating..." spinner                                                             | Transliteration in progress                  |
+| **Transliteration unavailable** | Exact letter panel shows "Transliteration unavailable — enter manually"                                      | Transliteration failed                       |
+| **Has previous submission**     | "My previous submission" panel below editor with pending text + "Edit" button                                | Translator already submitted, pending review |
+| **Has approved translation**    | "Approved Translation" panel shows the approved text (read-only)                                             | Section already has an approved translation  |
+| **Saving**                      | Spinner on Submit button, all inputs disabled                                                                | Translation being saved                      |
+| **Saved**                       | Green toast "Translation saved!" + auto-loads next section                                                   | Save succeeded                               |
+| **Complete**                    | Centered "All sections translated!" with checkmark icon                                                      | Queue empty for current filters              |
+| **Error**                       | Error message + [Retry] button                                                                               | API call failed                              |
+| **No sections**                 | "No sections match your filters. Try adjusting the filters."                                                 | Filters return empty results                 |
 
 #### Translate Tab Interactions
 
@@ -365,14 +428,14 @@ The translation page uses a **tabbed layout** with three tabs: Translate, Histor
 
 #### AI Extraction Status Indicators
 
-| Badge | Color | Meaning |
-| --- | --- | --- |
-| `[AI Extracted] 94% ●` | Green (`#16A34A`) | AI extraction complete, confidence ≥ 0.9 |
-| `[AI Extracted] 78% ●` | Yellow (`#F59E0B`) | AI extraction complete, confidence ≥ 0.7 |
-| `[AI Extracted] 45% ●` | Red (`#DC2626`) | AI extraction complete, confidence < 0.7 |
-| `[OCR] ●` | Gray (`#94A3B8`) | No AI extraction, using OCR fallback |
-| `[Extracting...] ●○○` | Blue animated | AI extraction in progress |
-| `[Extraction failed] ✕` | Red (`#DC2626`) | AI extraction failed |
+| Badge                   | Color              | Meaning                                  |
+| ----------------------- | ------------------ | ---------------------------------------- |
+| `[AI Extracted] 94% ●`  | Green (`#16A34A`)  | AI extraction complete, confidence ≥ 0.9 |
+| `[AI Extracted] 78% ●`  | Yellow (`#F59E0B`) | AI extraction complete, confidence ≥ 0.7 |
+| `[AI Extracted] 45% ●`  | Red (`#DC2626`)    | AI extraction complete, confidence < 0.7 |
+| `[OCR] ●`               | Gray (`#94A3B8`)   | No AI extraction, using OCR fallback     |
+| `[Extracting...] ●○○`   | Blue animated      | AI extraction in progress                |
+| `[Extraction failed] ✕` | Red (`#DC2626`)    | AI extraction failed                     |
 
 **Confidence threshold** is configurable by admin (default 0.7). Badge color is derived from the threshold setting.
 
@@ -397,13 +460,13 @@ Rules:
 
 #### Transliteration Panel States
 
-| State | Visual | Description |
-| --- | --- | --- |
-| **AI Generated** | Green badge "[AI Generated] ●" + pre-filled text | Transliteration from AI, cached |
-| **Generating** | Blue spinner "[Generating...] ●○○" + "Generating transliteration..." | Transliteration in progress |
-| **Unavailable** | Red badge "[Unavailable] ✕" + empty field | Transliteration failed, enter manually |
-| **Manual** | Gray badge "[Manual] ●" + user-typed text | Translator entered manually |
-| **Stale** | Yellow badge "[Regenerate needed] ●" + previous text + pulsing "Regenerate" button | Cache invalidated by source text edit |
+| State            | Visual                                                                             | Description                            |
+| ---------------- | ---------------------------------------------------------------------------------- | -------------------------------------- |
+| **AI Generated** | Green badge "[AI Generated] ●" + pre-filled text                                   | Transliteration from AI, cached        |
+| **Generating**   | Blue spinner "[Generating...] ●○○" + "Generating transliteration..."               | Transliteration in progress            |
+| **Unavailable**  | Red badge "[Unavailable] ✕" + empty field                                          | Transliteration failed, enter manually |
+| **Manual**       | Gray badge "[Manual] ●" + user-typed text                                          | Translator entered manually            |
+| **Stale**        | Yellow badge "[Regenerate needed] ●" + previous text + pulsing "Regenerate" button | Cache invalidated by source text edit  |
 
 #### AI Extraction Flow (Editor)
 
@@ -430,13 +493,13 @@ Rules:
 
 #### History Tab States
 
-| State | Visual | Description |
-| --- | --- | --- |
-| **Loading** | Skeleton list (6 placeholder rows) | Initial fetch in progress |
-| **Empty** | "No translations yet — start translating!" with link to Translate tab | No history entries match filters |
-| **Has entries** | Scrollable list of history items | Data loaded |
-| **Loading more** | Spinner at bottom of list | Infinite scroll fetching next page |
-| **Error** | "Failed to load history. [Retry]" | API call failed |
+| State            | Visual                                                                | Description                        |
+| ---------------- | --------------------------------------------------------------------- | ---------------------------------- |
+| **Loading**      | Skeleton list (6 placeholder rows)                                    | Initial fetch in progress          |
+| **Empty**        | "No translations yet — start translating!" with link to Translate tab | No history entries match filters   |
+| **Has entries**  | Scrollable list of history items                                      | Data loaded                        |
+| **Loading more** | Spinner at bottom of list                                             | Infinite scroll fetching next page |
+| **Error**        | "Failed to load history. [Retry]"                                     | API call failed                    |
 
 #### History Tab Interactions
 
@@ -464,12 +527,12 @@ Rules:
 
 #### Stats Tab States
 
-| State | Visual | Description |
-| --- | --- | --- |
-| **Loading** | Skeleton cards (progress bar placeholder, grid placeholders) | Initial fetch |
-| **Empty** | "No translation data yet. Sections need to be translated first." | Book has no translations |
-| **Has data** | Dashboard with progress bar, language breakdown, page grid, translator table | Data loaded |
-| **Error** | "Failed to load statistics. [Retry]" | API call failed |
+| State        | Visual                                                                       | Description              |
+| ------------ | ---------------------------------------------------------------------------- | ------------------------ |
+| **Loading**  | Skeleton cards (progress bar placeholder, grid placeholders)                 | Initial fetch            |
+| **Empty**    | "No translation data yet. Sections need to be translated first."             | Book has no translations |
+| **Has data** | Dashboard with progress bar, language breakdown, page grid, translator table | Data loaded              |
+| **Error**    | "Failed to load statistics. [Retry]"                                         | API call failed          |
 
 #### Stats Tab Interactions
 
@@ -483,6 +546,7 @@ Rules:
 #### Stats Tab Components
 
 **Progress Bar:**
+
 ```
 Translation Progress
 ████████████████░░░░░░░░░  37.5%
@@ -490,6 +554,7 @@ Approved: 45  ·  Pending: 12  ·  In Progress: 8  ·  Total: 120
 ```
 
 **Per-Language Cards:**
+
 ```
 ┌──────────────────────┐  ┌──────────────────────┐
 │  Sinhala (si)        │  │  Tamil (ta)          │
@@ -499,6 +564,7 @@ Approved: 45  ·  Pending: 12  ·  In Progress: 8  ·  Total: 120
 ```
 
 **Per-Page Grid:**
+
 ```
 Page:  1    2    3    4    5    6    7    8    ...
        🟢   🟡   🟢   ⬜   🟡   ⬜   ⬜   ⬜
@@ -506,6 +572,7 @@ Page:  1    2    3    4    5    6    7    8    ...
 ```
 
 **Translator Performance Table:**
+
 ```
 ┌──────────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
 │ Name         │ Assigned │ Approved │ Rejected │ Rate     │ Avg Time │
@@ -520,7 +587,7 @@ Page:  1    2    3    4    5    6    7    8    ...
 - Click row to expand and show last 10 translation submissions
 - Sortable by any column (click header, default: approval rate descending)
 
-### 3. Book Upload
+### 5. Book Upload
 
 **States:**
 
@@ -541,7 +608,7 @@ Page:  1    2    3    4    5    6    7    8    ...
 - Target Languages (multi-select, required — one or more languages to translate into)
 - Description (optional, textarea)
 
-### 4. Book Organization
+### 6. Book Organization
 
 - Drag-to-reorder pages in sidebar list
 - Status badges: ✅ Completed, ⏳ In Progress, ❌ Not Started, 🔄 Processing
@@ -549,7 +616,7 @@ Page:  1    2    3    4    5    6    7    8    ...
 - Filter buttons: All | Completed | In Progress | Not Started
 - Sort: Page Number | Progress %
 
-### 5. Translation Review (Editor)
+### 7. Translation Review (Editor)
 
 - Side-by-side comparison of all submitted translations per section
 - Each translation card shows: translator name, timestamp, translated text, exact letter text (if provided)
@@ -572,11 +639,12 @@ Error:      #DC2626 (red-600)
 Neutral:    #F8FAFC, #E2E8F0, #94A3B8, #475569, #0F172A
 
 Section Types:
-  Header:     #3B82F6 (blue-500)
-  Paragraph:  #22C55E (green-500)
-  Footnote:   #F97316 (orange-500)
-  Page Number: #6B7280 (gray-500)
-  Other:      #A855F7 (purple-500)
+  Header:        #3B82F6 (blue-500)
+  Paragraph:     #22C55E (green-500)
+  Footnote:      #F97316 (orange-500)
+  Image Caption: #A855F7 (purple-500)
+  Page Number:   #6B7280 (gray-500)
+  Other:         #8B5CF6 (violet-500)
 ```
 
 ## Typography
@@ -585,49 +653,39 @@ Section Types:
 - Headings: 700 weight
 - Body: 400 weight
 - Code/monospace: JetBrains Mono (for text comparison)
+- Section type labels on canvas: 11px bold, same color as section fill
 
 ## Responsive Breakpoints
 
-<<<<<<< Updated upstream
 - Mobile: < 768px — Stack layout, bottom sheet for sidebar
 - Tablet: 768-1024px — Collapsible sidebar
 - Desktop: > 1024px — Full layout as designed
-=======
+
 - **Mobile** (< 768px): Stack layout, bottom sheet for sidebar, simplified toolbar (icons only, labels hidden)
 - **Tablet** (768–1024px): Collapsible sidebar, toolbar with icon+label for important actions
 - **Desktop** (> 1024px): Full layout as designed
 
-## Responsive Behavior — Page Editor
-
-| Element            | Desktop (>1024px)               | Tablet (768–1024px)             | Mobile (<768px)                         |
-| ------------------ | ------------------------------- | ------------------------------- | --------------------------------------- |
-| Toolbar            | Full horizontal bar with labels | Two-row toolbar, labels visible | Single row, icons only, overflow scroll |
-| Canvas             | Full width available            | Full width, slightly smaller    | Full width, min-height 300px            |
-| Zoom controls      | Always visible                  | Always visible                  | Collapsed into expandable panel         |
-| Type selector      | Inline in toolbar               | Inline in toolbar               | Modal/dropdown overlay on tap           |
-| Sidebar properties | Right sidebar (if applicable)   | Bottom sheet                    | Bottom sheet                            |
-
 ## Responsive Behavior — Translation Page
 
-| Element            | Desktop (>1024px)                           | Tablet (768–1024px)                       | Mobile (<768px)                             |
-| ------------------ | ------------------------------------------- | ----------------------------------------- | ------------------------------------------- |
-| Tab bar            | Horizontal tabs with labels                 | Horizontal tabs with labels               | Horizontal tabs, compact (icons + short labels) |
-| Filters            | Inline horizontal row above tabs            | Collapsible row (tap to expand)           | Stacked vertically in a drawer             |
-| Translate layout   | Two-row: image+source top, trans+edit bottom | Two-row, collapsible image panel     | Stacked: all four panels vertically        |
-| Top row            | Side-by-side: image 50%, source text 50%    | Side-by-side, collapsible image           | Stacked: image on top, source text below   |
-| Bottom row         | Side-by-side: exact letter 50%, translation 50% | Side-by-side, fixed height          | Stacked: exact letter above translation    |
-| Section image      | 50% width top row, scrollable               | 40% width, collapsible                    | Full width, fixed height 240px             |
-| Source text panel  | 50% top row, editable, font scales with zoom | 60% top row, scrollable                  | Full width, below image, fixed font        |
-| Confidence badge   | Inline in panel header                      | Inline in panel header                    | Inline in panel header                     |
-| Extract button     | Below source text panel                     | Below source text panel                   | Below source text panel                    |
-| Exact letter panel | 50% bottom row, editable                    | 50% bottom row, fixed height              | Full width, above translation editor       |
-| Translation editor | 50% bottom row, auto-resize textarea        | 50% bottom row, fixed height textarea     | Full width, min-height 120px               |
-| Zoom controls      | Below image, always visible                 | Below image, always visible               | Inside image, overlay controls             |
-| Page context       | Horizontal bar below editor                 | Horizontal bar below editor               | Compact: "Page X of Y" with swipe          |
-| History list       | Full-width rows, side-by-side info          | Full-width rows, stacked info             | Stacked cards, full-width                  |
-| Stats dashboard    | Full grid layout                            | 2-column grid                             | Single-column stack                        |
-| Page grid          | Horizontal scroll with fixed cell size      | Horizontal scroll, smaller cells          | Wrap to multiple rows, tap to expand       |
-| Translator table   | Full-width table with all columns           | Table with some columns hidden            | Card layout per translator                 |
+| Element            | Desktop (>1024px)                               | Tablet (768–1024px)                   | Mobile (<768px)                                 |
+| ------------------ | ----------------------------------------------- | ------------------------------------- | ----------------------------------------------- |
+| Tab bar            | Horizontal tabs with labels                     | Horizontal tabs with labels           | Horizontal tabs, compact (icons + short labels) |
+| Filters            | Inline horizontal row above tabs                | Collapsible row (tap to expand)       | Stacked vertically in a drawer                  |
+| Translate layout   | Two-row: image+source top, trans+edit bottom    | Two-row, collapsible image panel      | Stacked: all four panels vertically             |
+| Top row            | Side-by-side: image 50%, source text 50%        | Side-by-side, collapsible image       | Stacked: image on top, source text below        |
+| Bottom row         | Side-by-side: exact letter 50%, translation 50% | Side-by-side, fixed height            | Stacked: exact letter above translation         |
+| Section image      | 50% width top row, scrollable                   | 40% width, collapsible                | Full width, fixed height 240px                  |
+| Source text panel  | 50% top row, editable, font scales with zoom    | 60% top row, scrollable               | Full width, below image, fixed font             |
+| Confidence badge   | Inline in panel header                          | Inline in panel header                | Inline in panel header                          |
+| Extract button     | Below source text panel                         | Below source text panel               | Below source text panel                         |
+| Exact letter panel | 50% bottom row, editable                        | 50% bottom row, fixed height          | Full width, above translation editor            |
+| Translation editor | 50% bottom row, auto-resize textarea            | 50% bottom row, fixed height textarea | Full width, min-height 120px                    |
+| Zoom controls      | Below image, always visible                     | Below image, always visible           | Inside image, overlay controls                  |
+| Page context       | Horizontal bar below editor                     | Horizontal bar below editor           | Compact: "Page X of Y" with swipe               |
+| History list       | Full-width rows, side-by-side info              | Full-width rows, stacked info         | Stacked cards, full-width                       |
+| Stats dashboard    | Full grid layout                                | 2-column grid                         | Single-column stack                             |
+| Page grid          | Horizontal scroll with fixed cell size          | Horizontal scroll, smaller cells      | Wrap to multiple rows, tap to expand            |
+| Translator table   | Full-width table with all columns               | Table with some columns hidden        | Card layout per translator                      |
 
 ## Accessibility
 
@@ -678,17 +736,17 @@ Section Types:
 
 ### Translation Page Keyboard Shortcuts
 
-| Key | Context | Action |
-| --- | --- | --- |
-| `Ctrl+Enter` | Translation editor | Submit translation |
-| `Escape` | Translation editor / Source text | Blur input / Skip section |
-| `+` / `=` | Image area focused | Zoom in (shared zoom) |
-| `-` | Image area focused | Zoom out (shared zoom) |
-| `0` | Image area focused | Reset zoom to 100% |
-| `1` | Anywhere | Switch to Translate tab |
-| `2` | Anywhere | Switch to History tab |
-| `3` | Anywhere | Switch to Stats tab (editors only) |
-| `?` | Anywhere | Toggle keyboard shortcuts help |
+| Key          | Context                          | Action                             |
+| ------------ | -------------------------------- | ---------------------------------- |
+| `Ctrl+Enter` | Translation editor               | Submit translation                 |
+| `Escape`     | Translation editor / Source text | Blur input / Skip section          |
+| `+` / `=`    | Image area focused               | Zoom in (shared zoom)              |
+| `-`          | Image area focused               | Zoom out (shared zoom)             |
+| `0`          | Image area focused               | Reset zoom to 100%                 |
+| `1`          | Anywhere                         | Switch to Translate tab            |
+| `2`          | Anywhere                         | Switch to History tab              |
+| `3`          | Anywhere                         | Switch to Stats tab (editors only) |
+| `?`          | Anywhere                         | Toggle keyboard shortcuts help     |
 
 - Keyboard shortcuts only fire when no text input is focused or when the image area is focused
 - Tooltips on zoom buttons show the associated shortcut (e.g., "Zoom in (+)")
@@ -711,7 +769,7 @@ Section Types:
 - **Translator row expand**: 300ms height animation with content fade-in
 - **Filter apply**: 150ms background flash on filter change confirmation
 - **Skip button**: Subtle rotation animation on click (360° spin)
-- **Submit button**: Progress dots animation during save ("Saving..." → ".  ." → ".. " → "...")
+- **Submit button**: Progress dots animation during save ("Saving..." → ". ." → ".. " → "...")
 - **Empty state illustration**: Subtle floating animation (3s infinite ease-in-out)
 - **Status badge**: Subtle pulse animation on status change (e.g., PENDING → APPROVED)
 - **Infinite scroll loader**: Three-dot bouncing animation
@@ -727,4 +785,3 @@ Section Types:
 - **Bidirectional sync indicator**: Brief 200ms highlight on the panel that receives synced data
 - **Extraction polling spinner**: Continuous rotation while polling extraction status
 - **AI text reveal**: 300ms fade-in when OCR text transitions to AI text after extraction completes
->>>>>>> Stashed changes

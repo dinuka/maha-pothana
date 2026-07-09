@@ -15,10 +15,13 @@ const getToken = async (): Promise<string> => {
   if (!tokenPromise) {
     tokenPromise = fetchToken().then((t) => {
       cachedToken = t
-      setTimeout(() => {
-        cachedToken = null
-        tokenPromise = null
-      }, 14 * 60 * 1000) // refresh before 15min expiry
+      setTimeout(
+        () => {
+          cachedToken = null
+          tokenPromise = null
+        },
+        14 * 60 * 1000,
+      ) // refresh before 15min expiry
       return t
     })
   }

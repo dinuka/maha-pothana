@@ -33,7 +33,7 @@ export const useTranslationDraft = (sectionId: string | null) => {
         }
       }, 5000)
     },
-    [sectionId, doSave]
+    [sectionId, doSave],
   )
 
   const updateText = useCallback(
@@ -42,7 +42,7 @@ export const useTranslationDraft = (sectionId: string | null) => {
       setIsDirty(text !== lastSavedText)
       debouncedSave(text)
     },
-    [lastSavedText, debouncedSave]
+    [lastSavedText, debouncedSave],
   )
 
   const resetDirty = useCallback(() => {

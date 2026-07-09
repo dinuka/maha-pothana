@@ -24,7 +24,7 @@ cd apps/api && uvicorn app.main:app --reload --port 8000
 cd apps/api && python -m pytest tests/ -v   # 41 pytest tests
 cd apps/api && celery -A app.tasks.celery_app worker --loglevel=info
 
-# Infrastructure only (MongoDB, Redis, MinIO, LibreTranslate)
+# Infrastructure only (MongoDB, Redis, MinIO)
 docker compose -f infra/docker-compose.dev.yml up -d
 
 # Full production stack
@@ -117,8 +117,8 @@ books/{bookId}/finalized.pdf
 
 **Section detection**: Editor triggers detection → Celery `detect_sections` runs LayoutParser on page image → sections saved to MongoDB → Frontend fetches and renders Konva rectangles → Editor confirms → `crop_sections` task crops each section from the page image and uploads to MinIO, updating `croppedImageKey` on each section.
 
-**Translation**: Translator hits `/translate` → GET `/api/sections/next` returns a random unworked section → translator sees cropped image from MinIO + auto-translation from LibreTranslate → submits translation → editor approves/rejects.
+**Translation**: Translator hits `/translate` → GET `/api/sections/next` returns a random unworked section → translator sees cropped image from MinIO + auto-translation from OpenRouter → submits translation → editor approves/rejects.
 
 ## Environment
 
-Copy `.env.example` to `.env`. Required vars: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_SECRET`. See `.env.example` for the full list including MongoDB, Redis, MinIO, and LibreTranslate URLs.
+Copy `.env.example` to `.env`. Required vars: `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_SECRET`. See `.env.example` for the full list including MongoDB, Redis, MinIO URLs, and `OPENROUTER_API_KEY`.

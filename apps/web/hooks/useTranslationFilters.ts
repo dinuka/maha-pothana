@@ -13,25 +13,31 @@ export const useTranslationFilters = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const filters: TranslationFilters = useMemo(() => ({
-    tab: searchParams.get("tab") ?? "translate",
-    bookId: searchParams.get("bookId"),
-    language: searchParams.get("language"),
-    page: searchParams.get("page") ? Number(searchParams.get("page")) : null,
-    status: searchParams.get("status"),
-  }), [searchParams])
+  const filters: TranslationFilters = useMemo(
+    () => ({
+      tab: searchParams.get("tab") ?? "translate",
+      bookId: searchParams.get("bookId"),
+      language: searchParams.get("language"),
+      page: searchParams.get("page") ? Number(searchParams.get("page")) : null,
+      status: searchParams.get("status"),
+    }),
+    [searchParams],
+  )
 
-  const setFilters = useCallback((updates: Partial<TranslationFilters>) => {
-    const params = new URLSearchParams(searchParams.toString())
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value === null || value === "" || value === undefined) {
-        params.delete(key)
-      } else {
-        params.set(key, String(value))
-      }
-    })
-    router.push(`?${params.toString()}`, { scroll: false })
-  }, [router, searchParams])
+  const setFilters = useCallback(
+    (updates: Partial<TranslationFilters>) => {
+      const params = new URLSearchParams(searchParams.toString())
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "" || value === undefined) {
+          params.delete(key)
+        } else {
+          params.set(key, String(value))
+        }
+      })
+      router.push(`?${params.toString()}`, { scroll: false })
+    },
+    [router, searchParams],
+  )
 
   const clearFilters = useCallback(() => {
     const tab = searchParams.get("tab")

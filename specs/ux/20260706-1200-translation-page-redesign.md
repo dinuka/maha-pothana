@@ -643,40 +643,40 @@ User clicks "Stats" tab
 
 ### 5.1 Breakpoint Strategy
 
-| Breakpoint | Width | Behavior |
-| --- | --- | --- |
-| Mobile | < 768px | Stacked layout, filter drawer, compact tabs |
-| Tablet | 768–1024px | Collapsible side-by-side, two-row filters |
-| Desktop | > 1024px | Full side-by-side layout, inline filters |
+| Breakpoint | Width      | Behavior                                    |
+| ---------- | ---------- | ------------------------------------------- |
+| Mobile     | < 768px    | Stacked layout, filter drawer, compact tabs |
+| Tablet     | 768–1024px | Collapsible side-by-side, two-row filters   |
+| Desktop    | > 1024px   | Full side-by-side layout, inline filters    |
 
 ### 5.2 Layout Adaptation Rules
 
 **Translate Tab:**
 
-| Element | Desktop | Tablet | Mobile |
-| --- | --- | --- | --- |
-| Section image | 50% width, scrollable | 40% width, collapsible | Full width, 240px height |
-| Source text | Right column, above editor | Right column, scrollable | Below image, before editor |
-| Translation editor | Right column, auto-resize | Right column, fixed height | Full width, 120px min |
-| Zoom controls | Below image, inline | Below image, inline | Overlay on image |
-| Page context | Horizontal bar below editor | Horizontal bar below editor | "Page X of Y" with swipe |
+| Element            | Desktop                     | Tablet                      | Mobile                     |
+| ------------------ | --------------------------- | --------------------------- | -------------------------- |
+| Section image      | 50% width, scrollable       | 40% width, collapsible      | Full width, 240px height   |
+| Source text        | Right column, above editor  | Right column, scrollable    | Below image, before editor |
+| Translation editor | Right column, auto-resize   | Right column, fixed height  | Full width, 120px min      |
+| Zoom controls      | Below image, inline         | Below image, inline         | Overlay on image           |
+| Page context       | Horizontal bar below editor | Horizontal bar below editor | "Page X of Y" with swipe   |
 
 **History Tab:**
 
-| Element | Desktop | Tablet | Mobile |
-| --- | --- | --- | --- |
-| History items | Full-width rows, side-by-side | Full-width rows, stacked info | Stacked cards |
-| Thumbnail | 48×48px inline | 48×48px inline | 64×64px top of card |
-| Status badge | Inline with text | Inline with text | Separate row |
+| Element       | Desktop                       | Tablet                        | Mobile              |
+| ------------- | ----------------------------- | ----------------------------- | ------------------- |
+| History items | Full-width rows, side-by-side | Full-width rows, stacked info | Stacked cards       |
+| Thumbnail     | 48×48px inline                | 48×48px inline                | 64×64px top of card |
+| Status badge  | Inline with text              | Inline with text              | Separate row        |
 
 **Stats Tab:**
 
-| Element | Desktop | Tablet | Mobile |
-| --- | --- | --- | --- |
-| Progress bar | Full width | Full width | Full width |
-| Language cards | Horizontal row | 2-column grid | Single column stack |
-| Page grid | Horizontal scroll, fixed cells | Horizontal scroll, smaller | Wrap to rows |
-| Translator table | Full table | Table, some columns hidden | Card per translator |
+| Element          | Desktop                        | Tablet                     | Mobile              |
+| ---------------- | ------------------------------ | -------------------------- | ------------------- |
+| Progress bar     | Full width                     | Full width                 | Full width          |
+| Language cards   | Horizontal row                 | 2-column grid              | Single column stack |
+| Page grid        | Horizontal scroll, fixed cells | Horizontal scroll, smaller | Wrap to rows        |
+| Translator table | Full table                     | Table, some columns hidden | Card per translator |
 
 ### 5.3 Touch Interactions (Mobile/Tablet)
 
@@ -693,18 +693,18 @@ User clicks "Stats" tab
 
 ### 6.1 Keyboard Navigation
 
-| Key | Context | Action |
-| --- | --- | --- |
-| `Tab` | Anywhere | Move focus through interactive elements |
-| `Shift+Tab` | Anywhere | Move focus backwards |
-| `Enter` / `Space` | Tab bar | Activate focused tab |
-| `Enter` / `Space` | History item | Navigate to section |
-| `Enter` / `Space` | Translator row | Expand/collapse |
-| `Escape` | Filter drawer | Close drawer |
-| `Escape` | Translation editor | Blur textarea |
-| `Ctrl+Enter` | Translation editor | Submit translation |
-| `+` / `-` | Section image area | Zoom in/out |
-| `?` | Anywhere | Toggle keyboard shortcuts help |
+| Key               | Context            | Action                                  |
+| ----------------- | ------------------ | --------------------------------------- |
+| `Tab`             | Anywhere           | Move focus through interactive elements |
+| `Shift+Tab`       | Anywhere           | Move focus backwards                    |
+| `Enter` / `Space` | Tab bar            | Activate focused tab                    |
+| `Enter` / `Space` | History item       | Navigate to section                     |
+| `Enter` / `Space` | Translator row     | Expand/collapse                         |
+| `Escape`          | Filter drawer      | Close drawer                            |
+| `Escape`          | Translation editor | Blur textarea                           |
+| `Ctrl+Enter`      | Translation editor | Submit translation                      |
+| `+` / `-`         | Section image area | Zoom in/out                             |
+| `?`               | Anywhere           | Toggle keyboard shortcuts help          |
 
 ### 6.2 ARIA Attributes
 
@@ -717,9 +717,7 @@ User clicks "Stats" tab
   <button role="tab" aria-selected="false" aria-controls="panel-history" id="tab-history">
     History
   </button>
-  <button role="tab" aria-selected="false" aria-controls="panel-stats" id="tab-stats">
-    Stats
-  </button>
+  <button role="tab" aria-selected="false" aria-controls="panel-stats" id="tab-stats">Stats</button>
 </div>
 
 <div role="tabpanel" id="panel-translate" aria-labelledby="tab-translate">
@@ -727,15 +725,18 @@ User clicks "Stats" tab
 </div>
 
 <!-- Progress bar -->
-<div role="progressbar" aria-valuenow="37.5" aria-valuemin="0" aria-valuemax="100"
-     aria-label="Translation progress: 37.5%">
+<div
+  role="progressbar"
+  aria-valuenow="37.5"
+  aria-valuemin="0"
+  aria-valuemax="100"
+  aria-label="Translation progress: 37.5%"
+>
   <!-- visual bar -->
 </div>
 
 <!-- Auto-save indicator -->
-<div aria-live="polite" aria-atomic="true">
-  Draft saved
-</div>
+<div aria-live="polite" aria-atomic="true">Draft saved</div>
 
 <!-- Status badges -->
 <span aria-label="Approved">✅ APPROVED</span>
@@ -757,23 +758,21 @@ User clicks "Stats" tab
 <select id="lang-filter" aria-describedby="lang-filter-desc">
   <option value="si">Sinhala</option>
 </select>
-<span id="lang-filter-desc" class="sr-only">
-  Filter translations by target language
-</span>
+<span id="lang-filter-desc" class="sr-only"> Filter translations by target language </span>
 ```
 
 ### 6.3 Screen Reader Announcements
 
-| Event | Announcement |
-| --- | --- |
-| Section loaded | "Section loaded: Page 3, Section 2" |
-| Draft saved | "Draft saved" (aria-live polite) |
-| Translation submitted | "Translation submitted successfully" |
-| History loaded | "History loaded: 15 translations" |
-| Stats loaded | "Statistics loaded: 37.5% complete" |
-| Error occurred | "Error: Failed to load section. Press Retry to try again." |
-| No results | "No sections match your filters" |
-| Tab switched | "History tab selected" (via tab activation) |
+| Event                 | Announcement                                               |
+| --------------------- | ---------------------------------------------------------- |
+| Section loaded        | "Section loaded: Page 3, Section 2"                        |
+| Draft saved           | "Draft saved" (aria-live polite)                           |
+| Translation submitted | "Translation submitted successfully"                       |
+| History loaded        | "History loaded: 15 translations"                          |
+| Stats loaded          | "Statistics loaded: 37.5% complete"                        |
+| Error occurred        | "Error: Failed to load section. Press Retry to try again." |
+| No results            | "No sections match your filters"                           |
+| Tab switched          | "History tab selected" (via tab activation)                |
 
 ### 6.4 Color and Contrast
 
@@ -799,6 +798,7 @@ User clicks "Stats" tab
 ### 7.1 Translate Tab
 
 **Empty State (no sections match filters):**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -815,6 +815,7 @@ User clicks "Stats" tab
 ```
 
 **Empty State (all sections translated):**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -831,6 +832,7 @@ User clicks "Stats" tab
 ```
 
 **Loading State:**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -848,6 +850,7 @@ User clicks "Stats" tab
 ```
 
 **Error State:**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -865,6 +868,7 @@ User clicks "Stats" tab
 ### 7.2 History Tab
 
 **Empty State:**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -881,6 +885,7 @@ User clicks "Stats" tab
 ```
 
 **Loading State (initial):**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -902,6 +907,7 @@ User clicks "Stats" tab
 ```
 
 **Loading More (infinite scroll):**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │  ... existing history items ...                 │
@@ -912,6 +918,7 @@ User clicks "Stats" tab
 ```
 
 **Error State:**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -927,6 +934,7 @@ User clicks "Stats" tab
 ### 7.3 Stats Tab
 
 **Empty State:**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -941,6 +949,7 @@ User clicks "Stats" tab
 ```
 
 **Loading State:**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -961,6 +970,7 @@ User clicks "Stats" tab
 ```
 
 **Error State:**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │                                                 │
@@ -979,27 +989,27 @@ User clicks "Stats" tab
 
 ### 8.1 Timing Guidelines
 
-| Interaction | Duration | Easing |
-| --- | --- | --- |
-| Tab content fade-in | 200ms | ease-out |
-| Tab content slide-up | 200ms | ease-out |
-| Draft saved indicator | 2s auto-dismiss | ease-in |
-| Draft saved slide-in | 200ms | ease-out |
-| History item hover | 150ms | ease |
-| History item press | 100ms | ease-in |
-| Progress bar fill | 600ms | ease-out |
-| Page grid cell hover | 150ms | ease |
-| Translator row expand | 300ms | ease-in-out |
-| Toast slide-in | 200ms | ease-out |
-| Toast auto-dismiss | 3s | ease-in |
-| Filter flash | 150ms | ease |
-| Skip button spin | 400ms | ease-in-out |
-| Submit loading dots | 1.5s cycle | linear |
-| Empty state float | 3s infinite | ease-in-out |
-| Status badge pulse | 600ms | ease-in-out |
-| Skeleton shimmer | 1.5s infinite | linear |
-| Error shake | 400ms | ease |
-| Zoom smooth | 150ms | ease |
+| Interaction           | Duration        | Easing      |
+| --------------------- | --------------- | ----------- |
+| Tab content fade-in   | 200ms           | ease-out    |
+| Tab content slide-up  | 200ms           | ease-out    |
+| Draft saved indicator | 2s auto-dismiss | ease-in     |
+| Draft saved slide-in  | 200ms           | ease-out    |
+| History item hover    | 150ms           | ease        |
+| History item press    | 100ms           | ease-in     |
+| Progress bar fill     | 600ms           | ease-out    |
+| Page grid cell hover  | 150ms           | ease        |
+| Translator row expand | 300ms           | ease-in-out |
+| Toast slide-in        | 200ms           | ease-out    |
+| Toast auto-dismiss    | 3s              | ease-in     |
+| Filter flash          | 150ms           | ease        |
+| Skip button spin      | 400ms           | ease-in-out |
+| Submit loading dots   | 1.5s cycle      | linear      |
+| Empty state float     | 3s infinite     | ease-in-out |
+| Status badge pulse    | 600ms           | ease-in-out |
+| Skeleton shimmer      | 1.5s infinite   | linear      |
+| Error shake           | 400ms           | ease        |
+| Zoom smooth           | 150ms           | ease        |
 
 ### 8.2 CSS Transition Classes
 
@@ -1012,7 +1022,9 @@ User clicks "Stats" tab
 .tab-content-active {
   opacity: 1;
   transform: translateY(0);
-  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
 }
 
 /* Draft indicator */
@@ -1023,7 +1035,9 @@ User clicks "Stats" tab
 .draft-indicator-active {
   opacity: 1;
   transform: translateX(0);
-  transition: opacity 200ms ease-out, transform 200ms ease-out;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
 }
 .draft-indicator-exit {
   opacity: 0;
@@ -1032,7 +1046,9 @@ User clicks "Stats" tab
 
 /* History item */
 .history-item {
-  transition: background-color 150ms ease, border-color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
 }
 .history-item:active {
   transform: scale(0.98);
@@ -1046,7 +1062,9 @@ User clicks "Stats" tab
 
 /* Page grid cell */
 .page-grid-cell {
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 .page-grid-cell:hover {
   transform: scale(1.1);
@@ -1056,13 +1074,19 @@ User clicks "Stats" tab
 /* Translator row expand */
 .translator-row-content {
   overflow: hidden;
-  transition: max-height 300ms ease-in-out, opacity 300ms ease-in-out;
+  transition:
+    max-height 300ms ease-in-out,
+    opacity 300ms ease-in-out;
 }
 
 /* Skeleton shimmer */
 @keyframes shimmer {
-  0% { background-position: -200px 0; }
-  100% { background-position: calc(200px + 100%) 0; }
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
 }
 .skeleton {
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
@@ -1072,9 +1096,16 @@ User clicks "Stats" tab
 
 /* Error shake */
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
 }
 .error-shake {
   animation: shake 400ms ease;
@@ -1082,8 +1113,13 @@ User clicks "Stats" tab
 
 /* Empty state float */
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 .empty-state-icon {
   animation: float 3s ease-in-out infinite;
@@ -1091,8 +1127,13 @@ User clicks "Stats" tab
 
 /* Status badge pulse */
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 .status-change {
   animation: pulse 600ms ease-in-out;
@@ -1139,14 +1180,14 @@ User clicks "Stats" tab
 
 ### 9.2 Param Rules
 
-| Param | Values | Default | Notes |
-| --- | --- | --- | --- |
-| `tab` | `translate`, `history`, `stats` | `translate` | Active tab |
-| `bookId` | ObjectId string | (required) | Selected book |
-| `lang` | ISO 639-1 code | (all) | Language filter, hidden if single lang |
-| `page` | integer | (all) | Page number filter |
-| `status` | `pending`, `approved`, `rejected` | (all) | Status filter |
-| `section` | ObjectId string | (none) | Pre-select section in translate tab |
+| Param     | Values                            | Default     | Notes                                  |
+| --------- | --------------------------------- | ----------- | -------------------------------------- |
+| `tab`     | `translate`, `history`, `stats`   | `translate` | Active tab                             |
+| `bookId`  | ObjectId string                   | (required)  | Selected book                          |
+| `lang`    | ISO 639-1 code                    | (all)       | Language filter, hidden if single lang |
+| `page`    | integer                           | (all)       | Page number filter                     |
+| `status`  | `pending`, `approved`, `rejected` | (all)       | Status filter                          |
+| `section` | ObjectId string                   | (none)      | Pre-select section in translate tab    |
 
 ### 9.3 Filter Independence
 

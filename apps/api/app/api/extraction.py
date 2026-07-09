@@ -30,10 +30,11 @@ router = APIRouter(prefix="/api", tags=["extraction"])
 @router.post("/sections/{section_id}/extract", status_code=202)
 async def trigger_extraction(
     section_id: str,
+    force: bool = Query(False),
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    logger.info("POST /sections/%s/extract - triggered by user %s", section_id, user_id)
+    logger.info("POST /sections/%s/extract - triggered by user %s (force=%s)", section_id, user_id, force)
 
     sec = await db.sections.find_one({"_id": ObjectId(section_id)})
     if not sec:
@@ -47,7 +48,7 @@ async def trigger_extraction(
     existing = await db.ai_text_extractions.find_one({"sectionId": section_id})
     logger.info("POST /sections/%s/extract - existing extraction: %s", section_id, existing)
 
-    if existing and existing.get("status") == "completed":
+    if not force and existing and existing.get("status") == "completed":
         logger.info("POST /sections/%s/extract - already completed, returning 409", section_id)
         return JSONResponse(
             status_code=409,
@@ -58,6 +59,9 @@ async def trigger_extraction(
                 "confidence": existing.get("confidence"),
             },
         )
+
+    if force and existing:
+        await db.ai_text_extractions.delete_many({"sectionId": section_id})
 
     from app.tasks.extract_section_text import extract_section_text
 
@@ -285,7 +289,7 @@ async def get_transliterations(
     section_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    cursor = db.transliterations.find({"sectionId": section_id})
+    cursor = db.transliterations.find({"sectionId": section_id, "status": "completed"})
     items = await cursor.to_list(length=100)
 
     transliterations = [
@@ -297,6 +301,7 @@ async def get_transliterations(
             createdAt=t.get("createdAt", datetime.now(timezone.utc)),
         )
         for t in items
+        if "transliteratedText" in t
     ]
 
     return TransliterationsResponse(

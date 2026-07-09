@@ -15,16 +15,16 @@ Transform the minimal `/translate` page (single "Next Section" button) into a fu
 
 ## 2. Key Technical Decisions
 
-| Decision | Choice | Rationale |
-| --- | --- | --- |
-| Page layout | **Tab bar** (Translate \| History \| Stats) | Clean separation of concerns; translators don't see Stats tab; simple to implement with `?tab=` query param |
-| Stats endpoint design | **Single aggregated endpoint** per concern (`/stats`, `/translators/stats`) | Reduces round trips; each aggregation is independent and cached separately |
-| Caching strategy | **Redis with 30s TTL** for stats; React Query `staleTime: 30000` on frontend | Stats are expensive aggregation queries; 30s cache avoids hammering MongoDB while staying "near real-time" |
-| Auto-load first section | **useEffect on mount** calls `/api/sections/next` | No SSR needed for this; translator's view is fully client-side |
-| Frontend data fetching | **React Query (TanStack Query)** | Provides caching, background refetch, optimistic updates, and cleanup; better than raw SWR for this complexity |
-| History pagination | **Cursor-based** (last `createdAt` as cursor) | Avoids skip/limit performance issues on large datasets; natural fit for infinite scroll |
-| Draft auto-save | **Backend API with 24h TTL collection** + localStorage fallback | Server-side drafts survive device switches; localStorage is immediate fallback if API is slow |
-| Filter state | **URL query params** | Shareable links, survives reload, independent between tabs via `?tab=history&lang=si&page=5` |
+| Decision                | Choice                                                                       | Rationale                                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Page layout             | **Tab bar** (Translate \| History \| Stats)                                  | Clean separation of concerns; translators don't see Stats tab; simple to implement with `?tab=` query param    |
+| Stats endpoint design   | **Single aggregated endpoint** per concern (`/stats`, `/translators/stats`)  | Reduces round trips; each aggregation is independent and cached separately                                     |
+| Caching strategy        | **Redis with 30s TTL** for stats; React Query `staleTime: 30000` on frontend | Stats are expensive aggregation queries; 30s cache avoids hammering MongoDB while staying "near real-time"     |
+| Auto-load first section | **useEffect on mount** calls `/api/sections/next`                            | No SSR needed for this; translator's view is fully client-side                                                 |
+| Frontend data fetching  | **React Query (TanStack Query)**                                             | Provides caching, background refetch, optimistic updates, and cleanup; better than raw SWR for this complexity |
+| History pagination      | **Cursor-based** (last `createdAt` as cursor)                                | Avoids skip/limit performance issues on large datasets; natural fit for infinite scroll                        |
+| Draft auto-save         | **Backend API with 24h TTL collection** + localStorage fallback              | Server-side drafts survive device switches; localStorage is immediate fallback if API is slow                  |
+| Filter state            | **URL query params**                                                         | Shareable links, survives reload, independent between tabs via `?tab=history&lang=si&page=5`                   |
 
 ---
 
@@ -36,18 +36,19 @@ Adds filter parameters to the existing endpoint.
 
 **Query Parameters:**
 
-| Param | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `bookId` | string | No | Scope to a specific book (previously global) |
-| `language` | string | No | Filter by target language |
-| `page` | int | No | Filter by page number |
-| `status` | string | No | `pending`, `translated`, `approved` |
+| Param      | Type   | Required | Notes                                        |
+| ---------- | ------ | -------- | -------------------------------------------- |
+| `bookId`   | string | No       | Scope to a specific book (previously global) |
+| `language` | string | No       | Filter by target language                    |
+| `page`     | int    | No       | Filter by page number                        |
+| `status`   | string | No       | `pending`, `translated`, `approved`          |
 
 **Response (200):** `NextSectionResponse` (unchanged schema)
 
 **Response (404):** `{ "detail": "No sections available" }`
 
 **Behavior Changes:**
+
 - When `bookId` is provided, only sections from that book are considered
 - Language filter matches sections whose parent book has that language in `translateLanguages`
 - Page filter matches `Page.pageNumber`
@@ -145,6 +146,7 @@ stats_pipeline = [
 ```
 
 **Caching:**
+
 - Redis key: `stats:book:{bookId}`
 - TTL: 30 seconds
 - Cache invalidated on: translation submit, approve, reject
@@ -189,6 +191,7 @@ class TranslatorStatsResponse(BaseModel):
 ```
 
 **Backend Logic:**
+
 - Group translations by `translatorId` where section belongs to the book
 - Join with `users` collection for `userName`
 - `approvalRate = approved / (approved + rejected) * 100` (null if both are 0)
@@ -196,6 +199,7 @@ class TranslatorStatsResponse(BaseModel):
 - `lastActiveAt = max(translation.createdAt)` for that translator
 
 **Caching:**
+
 - Redis key: `translators:stats:book:{bookId}`
 - TTL: 30 seconds
 - Cache invalidated on: translation submit, approve, reject
@@ -208,15 +212,15 @@ Returns paginated translation history. Translators see own only; editors see all
 
 **Query Parameters:**
 
-| Param | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `bookId` | string | Yes | Scope to book |
-| `translatorId` | string | No | Filter by translator (editors only) |
-| `language` | string | No | Filter by target language |
-| `page` | int | No | Filter by page number |
-| `status` | string | No | `submitted`, `approved`, `rejected` |
-| `cursor` | string | No | ISO timestamp of last item (for pagination) |
-| `limit` | int | No | Page size, default 20, max 50 |
+| Param          | Type   | Required | Notes                                       |
+| -------------- | ------ | -------- | ------------------------------------------- |
+| `bookId`       | string | Yes      | Scope to book                               |
+| `translatorId` | string | No       | Filter by translator (editors only)         |
+| `language`     | string | No       | Filter by target language                   |
+| `page`         | int    | No       | Filter by page number                       |
+| `status`       | string | No       | `submitted`, `approved`, `rejected`         |
+| `cursor`       | string | No       | ISO timestamp of last item (for pagination) |
+| `limit`        | int    | No       | Page size, default 20, max 50               |
 
 **Response (200):**
 
@@ -321,6 +325,7 @@ class DraftResponse(BaseModel):
 ```
 
 **Backend:**
+
 - Upsert on `{ sectionId: 1, translatorId: 1 }` compound index
 - TTL index on `createdAt` (24 hours) auto-expires old drafts
 - Returns existing draft ID if upserted
@@ -333,9 +338,9 @@ Fetches a translator's draft for a section.
 
 **Query Parameters:**
 
-| Param | Type | Required |
-| --- | --- | --- |
-| `sectionId` | string | Yes |
+| Param       | Type   | Required |
+| ----------- | ------ | -------- |
+| `sectionId` | string | Yes      |
 
 **Response (200):**
 
@@ -533,19 +538,19 @@ TranslatePage (app/translate/page.tsx) [Client Component]
 // ?tab=translate&bookId=X&lang=si&page=5&status=pending
 
 // React Query hooks
-useQuery(['nextSection', bookId, filters], fetchNextSection)
-useQuery(['translationHistory', bookId, historyFilters, cursor], fetchHistory)
-useQuery(['translationStats', bookId], fetchStats, { staleTime: 30000 })
-useQuery(['translatorStats', bookId], fetchTranslatorStats, { staleTime: 30000 })
-useQuery(['draft', sectionId], fetchDraft)
+useQuery(["nextSection", bookId, filters], fetchNextSection)
+useQuery(["translationHistory", bookId, historyFilters, cursor], fetchHistory)
+useQuery(["translationStats", bookId], fetchStats, { staleTime: 30000 })
+useQuery(["translatorStats", bookId], fetchTranslatorStats, { staleTime: 30000 })
+useQuery(["draft", sectionId], fetchDraft)
 
 useMutation(submitTranslation, {
   onSuccess: () => {
-    queryClient.invalidateQueries(['nextSection'])
-    queryClient.invalidateQueries(['translationHistory'])
-    queryClient.invalidateQueries(['translationStats'])
-    queryClient.invalidateQueries(['draft', sectionId])
-  }
+    queryClient.invalidateQueries(["nextSection"])
+    queryClient.invalidateQueries(["translationHistory"])
+    queryClient.invalidateQueries(["translationStats"])
+    queryClient.invalidateQueries(["draft", sectionId])
+  },
 })
 
 useMutation(saveDraft)
@@ -563,12 +568,13 @@ const [zoom, setZoom] = useState(100)
 ```typescript
 // Debounced auto-save (5 second inactivity)
 const debouncedSaveDraft = useMemo(
-  () => debounce((text: string) => {
-    if (text.trim() && sectionId) {
-      saveDraftMutation.mutate({ sectionId, translatedText: text })
-    }
-  }, 5000),
-  [sectionId]
+  () =>
+    debounce((text: string) => {
+      if (text.trim() && sectionId) {
+        saveDraftMutation.mutate({ sectionId, translatedText: text })
+      }
+    }, 5000),
+  [sectionId],
 )
 
 // Effect to save on text change
@@ -598,21 +604,21 @@ useEffect(() => {
 
 ### 6.1 Backend (Redis)
 
-| Key Pattern | TTL | Invalidated By | Notes |
-| --- | --- | --- | --- |
-| `stats:book:{bookId}` | 30s | Translation submit, approve, reject | Expensive aggregation |
-| `translators:stats:book:{bookId}` | 30s | Translation submit, approve, reject | Per-translator aggregation |
-| `draft:{sectionId}:{translatorId}` | None | Explicit DELETE on submit | Write-through, no TTL needed (TTL index handles expiry) |
+| Key Pattern                        | TTL  | Invalidated By                      | Notes                                                   |
+| ---------------------------------- | ---- | ----------------------------------- | ------------------------------------------------------- |
+| `stats:book:{bookId}`              | 30s  | Translation submit, approve, reject | Expensive aggregation                                   |
+| `translators:stats:book:{bookId}`  | 30s  | Translation submit, approve, reject | Per-translator aggregation                              |
+| `draft:{sectionId}:{translatorId}` | None | Explicit DELETE on submit           | Write-through, no TTL needed (TTL index handles expiry) |
 
 ### 6.2 Frontend (React Query)
 
-| Query Key | staleTime | cacheTime | Refetch Strategy |
-| --- | --- | --- | --- |
-| `['nextSection', bookId, filters] | 0 | 5min | Refetch on tab focus, manual skip |
-| `['translationHistory', ...] | 30s | 10min | Refetch on tab focus |
-| `['translationStats', bookId] | 30s | 5min | Poll every 30s, refetch on tab focus |
-| `['translatorStats', bookId] | 30s | 5min | Poll every 30s |
-| `['draft', sectionId] | 0 | 5min | Refetch on section change |
+| Query Key                         | staleTime | cacheTime | Refetch Strategy                     |
+| --------------------------------- | --------- | --------- | ------------------------------------ |
+| `['nextSection', bookId, filters] | 0         | 5min      | Refetch on tab focus, manual skip    |
+| `['translationHistory', ...]      | 30s       | 10min     | Refetch on tab focus                 |
+| `['translationStats', bookId]     | 30s       | 5min      | Poll every 30s, refetch on tab focus |
+| `['translatorStats', bookId]      | 30s       | 5min      | Poll every 30s                       |
+| `['draft', sectionId]             | 0         | 5min      | Refetch on section change            |
 
 ---
 
@@ -736,14 +742,14 @@ async def get_translation_history(
 
 ## 8. New Backend Files
 
-| File | Purpose |
-| --- | --- |
-| `app/api/books_stats.py` | `GET /api/books/{id}/stats` and `GET /api/books/{id}/translators/stats` |
-| `app/api/translations_history.py` | `GET /api/translations/history` |
-| `app/api/translations_draft.py` | `POST/GET/DELETE /api/translations/draft` |
-| `app/schemas/stats.py` | `TranslationStatsResponse`, `LanguageStats`, `PageStats`, `TranslatorStatsResponse` |
-| `app/schemas/history.py` | `TranslationHistoryItem`, `TranslationHistoryResponse` |
-| `app/schemas/draft.py` | `DraftCreate`, `DraftResponse` |
+| File                              | Purpose                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------- |
+| `app/api/books_stats.py`          | `GET /api/books/{id}/stats` and `GET /api/books/{id}/translators/stats`             |
+| `app/api/translations_history.py` | `GET /api/translations/history`                                                     |
+| `app/api/translations_draft.py`   | `POST/GET/DELETE /api/translations/draft`                                           |
+| `app/schemas/stats.py`            | `TranslationStatsResponse`, `LanguageStats`, `PageStats`, `TranslatorStatsResponse` |
+| `app/schemas/history.py`          | `TranslationHistoryItem`, `TranslationHistoryResponse`                              |
+| `app/schemas/draft.py`            | `DraftCreate`, `DraftResponse`                                                      |
 
 ### Router Registration
 
@@ -763,33 +769,33 @@ app.include_router(translations_draft_router)
 
 ## 9. New Frontend Files
 
-| File | Purpose |
-| --- | --- |
-| `app/translate/page.tsx` | Rewrite: tabbed layout with filters, auto-load |
-| `app/translate/TranslateTab.tsx` | Translate tab content (section editor) |
-| `app/translate/HistoryTab.tsx` | History tab content (infinite scroll list) |
-| `app/translate/StatsTab.tsx` | Stats tab content (editor-only dashboard) |
-| `app/translate/TranslateFilters.tsx` | Filter bar component |
-| `app/translate/components/SourceTextPanel.tsx` | Original text display |
-| `app/translate/components/DraftSaveIndicator.tsx` | "Draft saved" feedback |
-| `app/translate/components/HistoryItem.tsx` | Single history row |
-| `app/translate/components/TranslatorStatsRow.tsx` | Expandable translator stats row |
-| `lib/api/translations.ts` | API client functions for all translation endpoints |
-| `hooks/useTranslationDraft.ts` | Custom hook for auto-save draft logic |
-| `hooks/useTranslationFilters.ts` | Custom hook for URL-synced filter state |
+| File                                              | Purpose                                            |
+| ------------------------------------------------- | -------------------------------------------------- |
+| `app/translate/page.tsx`                          | Rewrite: tabbed layout with filters, auto-load     |
+| `app/translate/TranslateTab.tsx`                  | Translate tab content (section editor)             |
+| `app/translate/HistoryTab.tsx`                    | History tab content (infinite scroll list)         |
+| `app/translate/StatsTab.tsx`                      | Stats tab content (editor-only dashboard)          |
+| `app/translate/TranslateFilters.tsx`              | Filter bar component                               |
+| `app/translate/components/SourceTextPanel.tsx`    | Original text display                              |
+| `app/translate/components/DraftSaveIndicator.tsx` | "Draft saved" feedback                             |
+| `app/translate/components/HistoryItem.tsx`        | Single history row                                 |
+| `app/translate/components/TranslatorStatsRow.tsx` | Expandable translator stats row                    |
+| `lib/api/translations.ts`                         | API client functions for all translation endpoints |
+| `hooks/useTranslationDraft.ts`                    | Custom hook for auto-save draft logic              |
+| `hooks/useTranslationFilters.ts`                  | Custom hook for URL-synced filter state            |
 
 ---
 
 ## 10. Implementation Order
 
-| Phase | Stories | Backend | Frontend | Effort |
-| --- | --- | --- | --- | --- |
-| **Phase 1** | US-TR-5 | None (existing data) | Rewrite `translate/page.tsx` with side-by-side layout, source text panel | 1 day |
-| **Phase 2** | US-TR-1 | `translations_history.py`, `schemas/history.py` | `HistoryTab.tsx`, `HistoryItem.tsx`, infinite scroll | 1.5 days |
-| **Phase 3** | US-TR-4 | Update `sections.py` (filter params), update `translations_history.py` | `TranslateFilters.tsx`, URL param sync | 1 day |
-| **Phase 4** | US-TR-2 | `books_stats.py`, `schemas/stats.py`, Redis caching | `StatsTab.tsx`, `TranslationStatsCard`, `PerPageBreakdown` | 1.5 days |
-| **Phase 5** | US-TR-3 | Extend `books_stats.py`, `TranslatorStatsResponse` | `TranslatorStatsTable.tsx` | 1 day |
-| **Phase 6** | US-TR-6 | `translations_draft.py`, `schemas/draft.py`, `TranslationDraft` collection | `useTranslationDraft.ts`, `DraftSaveIndicator.tsx` | 1 day |
+| Phase       | Stories | Backend                                                                    | Frontend                                                                 | Effort   |
+| ----------- | ------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------- |
+| **Phase 1** | US-TR-5 | None (existing data)                                                       | Rewrite `translate/page.tsx` with side-by-side layout, source text panel | 1 day    |
+| **Phase 2** | US-TR-1 | `translations_history.py`, `schemas/history.py`                            | `HistoryTab.tsx`, `HistoryItem.tsx`, infinite scroll                     | 1.5 days |
+| **Phase 3** | US-TR-4 | Update `sections.py` (filter params), update `translations_history.py`     | `TranslateFilters.tsx`, URL param sync                                   | 1 day    |
+| **Phase 4** | US-TR-2 | `books_stats.py`, `schemas/stats.py`, Redis caching                        | `StatsTab.tsx`, `TranslationStatsCard`, `PerPageBreakdown`               | 1.5 days |
+| **Phase 5** | US-TR-3 | Extend `books_stats.py`, `TranslatorStatsResponse`                         | `TranslatorStatsTable.tsx`                                               | 1 day    |
+| **Phase 6** | US-TR-6 | `translations_draft.py`, `schemas/draft.py`, `TranslationDraft` collection | `useTranslationDraft.ts`, `DraftSaveIndicator.tsx`                       | 1 day    |
 
 **Total estimated effort: ~7 days**
 
@@ -799,22 +805,22 @@ app.include_router(translations_draft_router)
 
 ### Backend Tests
 
-| Test File | Covers |
-| --- | ---|
-| `tests/test_books_stats.py` | Stats aggregation, caching, cache invalidation |
-| `tests/test_translator_stats.py` | Per-translator metrics, approval rate calculation |
+| Test File                            | Covers                                                |
+| ------------------------------------ | ----------------------------------------------------- |
+| `tests/test_books_stats.py`          | Stats aggregation, caching, cache invalidation        |
+| `tests/test_translator_stats.py`     | Per-translator metrics, approval rate calculation     |
 | `tests/test_translations_history.py` | History query, pagination, filters, role-based access |
-| `tests/test_translations_draft.py` | Draft CRUD, TTL expiry, upsert semantics |
+| `tests/test_translations_draft.py`   | Draft CRUD, TTL expiry, upsert semantics              |
 
 ### Frontend Tests
 
-| Test File | Covers |
-| --- | --- |
-| `__tests__/TranslatePage.test.tsx` | Tab switching, filter state, auto-load |
-| `__tests__/HistoryTab.test.tsx` | History rendering, infinite scroll, empty state |
-| `__tests__/StatsTab.test.tsx` | Stats card, page breakdown, translator table |
-| `__tests__/TranslateFilters.test.tsx` | Filter changes, URL sync, clear filters |
-| `__tests__/useTranslationDraft.test.ts` | Auto-save debounce, draft fetch, beforeunload |
+| Test File                               | Covers                                          |
+| --------------------------------------- | ----------------------------------------------- |
+| `__tests__/TranslatePage.test.tsx`      | Tab switching, filter state, auto-load          |
+| `__tests__/HistoryTab.test.tsx`         | History rendering, infinite scroll, empty state |
+| `__tests__/StatsTab.test.tsx`           | Stats card, page breakdown, translator table    |
+| `__tests__/TranslateFilters.test.tsx`   | Filter changes, URL sync, clear filters         |
+| `__tests__/useTranslationDraft.test.ts` | Auto-save debounce, draft fetch, beforeunload   |
 
 ---
 

@@ -1,107 +1,58 @@
 "use client"
 
-import { Suspense } from "react"
-import { TranslateTab } from "./TranslateTab"
-import { HistoryTab } from "./HistoryTab"
-import { StatsTab } from "./StatsTab"
-import { TranslateFilters } from "./TranslateFilters"
-import { useTranslationFilters } from "@/hooks/useTranslationFilters"
+import { useEffect, useState } from "react"
+import type { BookListItem } from "@/lib/api/books"
+import { getAvailableBooks } from "@/lib/api/books"
+import { BookCard } from "./components/BookCard"
 
-const TABS = ["translate", "history", "stats"] as const
-type Tab = (typeof TABS)[number]
+const TranslatePage = () => {
+  const [books, setBooks] = useState<BookListItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-const TranslatePageInner = () => {
-  const { filters, setFilters, clearFilters } = useTranslationFilters()
-  const activeTab = (TABS.includes(filters.tab as Tab) ? filters.tab : "translate") as Tab
-
-  const handleTabChange = (tab: Tab) => {
-    setFilters({ tab })
-  }
-
-  const handleSectionClick = (sectionId: string) => {
-    window.location.href = `/translate?section=${sectionId}`
-  }
+  useEffect(() => {
+    getAvailableBooks()
+      .then((data) => setBooks(data))
+      .catch(() => setError("Failed to load books"))
+      .finally(() => setLoading(false))
+  }, [])
 
   return (
     <div style={styles.page}>
       <h1 style={styles.title}>Translate</h1>
+      <p style={styles.subtitle}>
+        Pick a book to translate, review its history, or check its progress.
+      </p>
 
-      <TranslateFilters
-        filters={filters}
-        onFilterChange={setFilters}
-        onClearFilters={clearFilters}
-      />
+      {loading && (
+        <div style={styles.loading}>
+          <div style={styles.spinner} />
+          <span>Loading books...</span>
+        </div>
+      )}
 
-      {/* Tab Bar */}
-      <div style={styles.tabBar} role="tablist" aria-label="Translation console tabs">
-        <button
-          role="tab"
-          aria-selected={activeTab === "translate"}
-          aria-controls="panel-translate"
-          id="tab-translate"
-          onClick={() => handleTabChange("translate")}
-          style={{
-            ...styles.tab,
-            ...(activeTab === "translate" ? styles.tabActive : {}),
-          }}
-        >
-          Translate
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === "history"}
-          aria-controls="panel-history"
-          id="tab-history"
-          onClick={() => handleTabChange("history")}
-          style={{
-            ...styles.tab,
-            ...(activeTab === "history" ? styles.tabActive : {}),
-          }}
-        >
-          History
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === "stats"}
-          aria-controls="panel-stats"
-          id="tab-stats"
-          onClick={() => handleTabChange("stats")}
-          style={{
-            ...styles.tab,
-            ...(activeTab === "stats" ? styles.tabActive : {}),
-          }}
-        >
-          Stats
-        </button>
-      </div>
+      {!loading && error && (
+        <div style={styles.emptyState}>
+          <div style={styles.emptyIcon}>⚠️</div>
+          <div style={styles.emptyTitle}>{error}</div>
+        </div>
+      )}
 
-      {/* Tab Content */}
-      <div style={styles.content}>
-        {activeTab === "translate" && (
-          <div role="tabpanel" id="panel-translate" aria-labelledby="tab-translate">
-            <TranslateTab filters={filters} isEditor={true} />
-          </div>
-        )}
-        {activeTab === "history" && (
-          <div role="tabpanel" id="panel-history" aria-labelledby="tab-history">
-            <HistoryTab filters={filters} onSectionClick={handleSectionClick} />
-          </div>
-        )}
-        {activeTab === "stats" && (
-          <div role="tabpanel" id="panel-stats" aria-labelledby="tab-stats">
-            <StatsTab bookId={filters.bookId} />
-          </div>
-        )}
-      </div>
+      {!loading && !error && books.length === 0 && (
+        <div style={styles.emptyState}>
+          <div style={styles.emptyIcon}>📚</div>
+          <div style={styles.emptyTitle}>No books ready for translation yet</div>
+        </div>
+      )}
+
+      {!loading && !error && books.length > 0 && (
+        <div style={styles.grid}>
+          {books.map((book) => (
+            <BookCard key={book.id} book={book} />
+          ))}
+        </div>
+      )}
     </div>
-  )
-}
-
-const TranslatePage = () => {
-  return (
-    <Suspense fallback={<div style={{ padding: 32, textAlign: "center", color: "var(--muted)" }}>Loading...</div>}>
-      <TranslatePageInner />
-    </Suspense>
   )
 }
 
@@ -116,31 +67,46 @@ const styles: Record<string, React.CSSProperties> = {
   title: {
     fontSize: 28,
     fontWeight: 700,
-    marginBottom: 24,
+    marginBottom: 8,
   },
-  tabBar: {
-    display: "flex",
-    gap: 0,
-    borderBottom: "2px solid var(--border)",
-    marginBottom: 24,
-  },
-  tab: {
-    padding: "12px 24px",
-    background: "none",
-    border: "none",
-    borderBottom: "2px solid transparent",
-    marginBottom: -2,
+  subtitle: {
     fontSize: 14,
-    fontWeight: 600,
     color: "var(--muted)",
-    cursor: "pointer",
-    transition: "color 0.15s, border-color 0.15s",
+    marginBottom: 24,
   },
-  tabActive: {
-    color: "var(--primary)",
-    borderBottomColor: "var(--primary)",
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+    gap: 16,
   },
-  content: {
-    minHeight: 400,
+  loading: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 64,
+    color: "var(--muted)",
+  },
+  spinner: {
+    width: 20,
+    height: 20,
+    border: "2px solid var(--border)",
+    borderTopColor: "var(--primary)",
+    borderRadius: "50%",
+    animation: "spin 0.8s linear infinite",
+  },
+  emptyState: {
+    textAlign: "center",
+    padding: 64,
+    color: "var(--muted)",
+  },
+  emptyIcon: {
+    fontSize: 32,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: 600,
+    color: "var(--foreground)",
   },
 }

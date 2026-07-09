@@ -11,7 +11,7 @@ A collaborative book translation platform. Translators work on sections of digit
 | Database    | MongoDB 7                                            |
 | Cache/Queue | Redis 7                                              |
 | Storage     | MinIO (S3-compatible)                                |
-| Translation | LibreTranslate (self-hosted)                         |
+| Translation | OpenRouter (LLM-based)                               |
 | Auth        | NextAuth v5 + Google OAuth                           |
 | UI          | CSS Modules, Konva.js (section annotation)           |
 | Monorepo    | Turborepo + pnpm                                     |
@@ -49,7 +49,7 @@ See `.env.example` for all available variables.
 
 ### Dev Environment — Infra in Docker, Apps Natively
 
-Start infrastructure only (MongoDB, Redis, MinIO, LibreTranslate):
+Start infrastructure only (MongoDB, Redis, MinIO):
 
 ```sh
 docker compose -f infra/docker-compose.dev.yml up -d
@@ -78,7 +78,7 @@ docker compose -f infra/docker-compose.yml build
 docker compose -f infra/docker-compose.yml up -d
 ```
 
-This starts: nginx (port 80), Next.js, FastAPI, Celery worker, MongoDB, Redis, MinIO, LibreTranslate.
+This starts: nginx (port 80), Next.js, FastAPI, Celery worker, MongoDB, Redis, MinIO.
 
 ## Commands
 

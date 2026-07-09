@@ -47,10 +47,15 @@ async def test_get_section(client, mock_db, sample_section):
 
 
 @pytest.mark.asyncio
-async def test_submit_translation_new(client, mock_db, sample_section, sample_translation):
+async def test_submit_translation_new(
+    client, mock_db, sample_section, sample_translation, sample_page, sample_user
+):
     mock_db.sections.find_one = AsyncMock(return_value=sample_section)
+    mock_db.pages.find_one = AsyncMock(return_value=sample_page)
+    mock_db.users.find_one = AsyncMock(return_value=sample_user)
     mock_db.translations.find_one = AsyncMock(return_value=None)
     mock_db.translations.insert_one = AsyncMock()
+    mock_db.translation_activity.insert_one = AsyncMock()
 
     response = await client.post(
         f'/api/sections/{sample_section["_id"]}/translate',
@@ -64,13 +69,19 @@ async def test_submit_translation_new(client, mock_db, sample_section, sample_tr
     assert response.status_code == 200
     assert response.json()["status"] == "saved"
     mock_db.translations.insert_one.assert_awaited_once()
+    mock_db.translation_activity.insert_one.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_submit_translation_update(client, mock_db, sample_section, sample_translation):
+async def test_submit_translation_update(
+    client, mock_db, sample_section, sample_translation, sample_page, sample_user
+):
     mock_db.sections.find_one = AsyncMock(return_value=sample_section)
+    mock_db.pages.find_one = AsyncMock(return_value=sample_page)
+    mock_db.users.find_one = AsyncMock(return_value=sample_user)
     mock_db.translations.find_one = AsyncMock(return_value=sample_translation)
     mock_db.translations.update_one = AsyncMock()
+    mock_db.translation_activity.insert_one = AsyncMock()
 
     response = await client.post(
         f'/api/sections/{sample_section["_id"]}/translate',
@@ -83,6 +94,7 @@ async def test_submit_translation_update(client, mock_db, sample_section, sample
     assert response.status_code == 200
     assert response.json()["status"] == "saved"
     mock_db.translations.update_one.assert_awaited_once()
+    mock_db.translation_activity.insert_one.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -129,9 +141,15 @@ async def test_get_section_translations(client, mock_db, sample_section, sample_
 
 
 @pytest.mark.asyncio
-async def test_approve_translation(client, mock_db, sample_translation):
+async def test_approve_translation(
+    client, mock_db, sample_translation, sample_section, sample_page, sample_user
+):
+    mock_db.translations.find_one = AsyncMock(return_value=sample_translation)
     mock_db.translations.update_one = AsyncMock()
-    mock_db.translations.update_one.return_value.matched_count = 1
+    mock_db.sections.find_one = AsyncMock(return_value=sample_section)
+    mock_db.pages.find_one = AsyncMock(return_value=sample_page)
+    mock_db.users.find_one = AsyncMock(return_value=sample_user)
+    mock_db.translation_activity.insert_one = AsyncMock()
 
     response = await client.post(
         f'/api/translations/{sample_translation["_id"]}/approve',
@@ -140,12 +158,12 @@ async def test_approve_translation(client, mock_db, sample_translation):
 
     assert response.status_code == 200
     assert response.json()["status"] == "approved"
+    mock_db.translation_activity.insert_one.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_approve_translation_not_found(client, mock_db):
-    mock_db.translations.update_one = AsyncMock()
-    mock_db.translations.update_one.return_value.matched_count = 0
+    mock_db.translations.find_one = AsyncMock(return_value=None)
 
     response = await client.post(
         f'/api/translations/507f1f77bcf86cd799439999/approve',
@@ -156,9 +174,15 @@ async def test_approve_translation_not_found(client, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_reject_translation(client, mock_db, sample_translation):
+async def test_reject_translation(
+    client, mock_db, sample_translation, sample_section, sample_page, sample_user
+):
+    mock_db.translations.find_one = AsyncMock(return_value=sample_translation)
     mock_db.translations.update_one = AsyncMock()
-    mock_db.translations.update_one.return_value.matched_count = 1
+    mock_db.sections.find_one = AsyncMock(return_value=sample_section)
+    mock_db.pages.find_one = AsyncMock(return_value=sample_page)
+    mock_db.users.find_one = AsyncMock(return_value=sample_user)
+    mock_db.translation_activity.insert_one = AsyncMock()
 
     response = await client.post(
         f'/api/translations/{sample_translation["_id"]}/reject',
@@ -167,3 +191,4 @@ async def test_reject_translation(client, mock_db, sample_translation):
 
     assert response.status_code == 200
     assert response.json()["status"] == "rejected"
+    mock_db.translation_activity.insert_one.assert_awaited_once()

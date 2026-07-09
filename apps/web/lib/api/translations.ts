@@ -68,10 +68,19 @@ export interface NextSectionResponse {
   aiExtractedText: string | null
   exactLetterTranslation: string | null
   autoTranslatedText: string | null
+  wordByWordMeaning: string | null
+  fullMeaning: string | null
+  simplifiedMeaning: string | null
   pageNumber: number
   bookTitle: string
-  book: { id: string }
+  book: { id: string; sourceLanguage: string | null }
   croppedImageUrl: string | null
+}
+
+export interface VerseAnalysisResponse {
+  wordByWordMeaning: string
+  fullMeaning: string
+  simplifiedMeaning: string
 }
 
 const fetchApi = async <T>(path: string, options?: RequestInit): Promise<T> => {
@@ -97,12 +106,20 @@ export const getNextSection = (params: {
   return fetchApi<NextSectionResponse>(`/api/sections/next${qs ? `?${qs}` : ""}`)
 }
 
+export const analyzeSection = (sectionId: string) =>
+  fetchApi<VerseAnalysisResponse>(`/api/sections/${sectionId}/analyze`, {
+    method: "POST",
+  })
+
 export const getMyTranslation = (sectionId: string) =>
   fetchApi<{ translatedText: string; exactLetterTranslation: string | null; isApproved: boolean }>(
-    `/api/sections/${sectionId}/my-translation`
+    `/api/sections/${sectionId}/my-translation`,
   )
 
-export const submitTranslation = (sectionId: string, body: { translatedText: string; exactLetterTranslation?: string | null }) =>
+export const submitTranslation = (
+  sectionId: string,
+  body: { translatedText: string; exactLetterTranslation?: string | null },
+) =>
   fetchApi<{ status: string }>(`/api/sections/${sectionId}/translate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -126,7 +143,9 @@ export const getTranslationHistory = (params: {
   if (params.status) searchParams.set("status", params.status)
   if (params.cursor) searchParams.set("cursor", params.cursor)
   if (params.limit) searchParams.set("limit", String(params.limit))
-  return fetchApi<TranslationHistoryResponse>(`/api/translations/history?${searchParams.toString()}`)
+  return fetchApi<TranslationHistoryResponse>(
+    `/api/translations/history?${searchParams.toString()}`,
+  )
 }
 
 export const getBookStats = (bookId: string) =>

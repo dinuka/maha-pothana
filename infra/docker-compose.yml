@@ -18,10 +18,6 @@ services:
     volumes:
       - minio_data:/data
 
-  libretranslate:
-    image: libretranslate/libretranslate:latest
-    command: --disable-files-translation --disable-web-ui
-
   nginx:
     image: nginx:alpine
     ports:

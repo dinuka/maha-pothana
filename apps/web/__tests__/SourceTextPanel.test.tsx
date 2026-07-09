@@ -17,13 +17,7 @@ describe("SourceTextPanel", () => {
   })
 
   it("renders with OCR text when no AI text", () => {
-    render(
-      <SourceTextPanel
-        originalText="Original OCR text"
-        aiExtractedText={null}
-        zoom={100}
-      />
-    )
+    render(<SourceTextPanel originalText="Original OCR text" aiExtractedText={null} zoom={100} />)
     expect(screen.getByText("Original OCR text")).toBeInTheDocument()
     expect(screen.getByText("OCR")).toBeInTheDocument()
   })
@@ -35,7 +29,7 @@ describe("SourceTextPanel", () => {
         aiExtractedText="AI extracted text"
         confidence={0.95}
         zoom={100}
-      />
+      />,
     )
     expect(screen.getByText("AI extracted text")).toBeInTheDocument()
     expect(screen.getByText(/AI Extracted 95%/)).toBeInTheDocument()
@@ -47,7 +41,7 @@ describe("SourceTextPanel", () => {
         originalText="Original OCR text"
         aiExtractedText="AI extracted text"
         zoom={100}
-      />
+      />,
     )
     expect(screen.getByText("AI Extracted")).toBeInTheDocument()
     expect(screen.getByText("Show OCR")).toBeInTheDocument()
@@ -59,7 +53,7 @@ describe("SourceTextPanel", () => {
         originalText="Original OCR text"
         aiExtractedText="AI extracted text"
         zoom={100}
-      />
+      />,
     )
     fireEvent.click(screen.getByText("Show OCR"))
     expect(screen.getByText("Original OCR text")).toBeInTheDocument()
@@ -75,7 +69,7 @@ describe("SourceTextPanel", () => {
         aiExtractedText={null}
         extractionStatus="pending"
         zoom={100}
-      />
+      />,
     )
     expect(screen.getByText("Extracting...")).toBeInTheDocument()
     expect(screen.getByText("AI extraction in progress...")).toBeInTheDocument()
@@ -90,7 +84,7 @@ describe("SourceTextPanel", () => {
         isEditor={true}
         zoom={100}
         onExtract={vi.fn()}
-      />
+      />,
     )
     expect(screen.getByText("Extraction failed")).toBeInTheDocument()
     expect(screen.getByText("Extraction failed — using OCR text")).toBeInTheDocument()
@@ -106,7 +100,7 @@ describe("SourceTextPanel", () => {
         isEditor={true}
         zoom={100}
         onExtract={onExtract}
-      />
+      />,
     )
     expect(screen.getByText("Extract Text")).toBeInTheDocument()
     fireEvent.click(screen.getByText("Extract Text"))
@@ -120,7 +114,7 @@ describe("SourceTextPanel", () => {
         aiExtractedText={null}
         isEditor={false}
         zoom={100}
-      />
+      />,
     )
     expect(screen.queryByText("Extract Text")).not.toBeInTheDocument()
   })
@@ -133,32 +127,22 @@ describe("SourceTextPanel", () => {
         isEditor={true}
         zoom={100}
         onExtract={vi.fn()}
-      />
+      />,
     )
     expect(screen.getByText("Regenerate")).toBeInTheDocument()
   })
 
   it("scales font size with zoom", () => {
-    render(
-      <SourceTextPanel
-        originalText="Original text"
-        aiExtractedText={null}
-        zoom={150}
-      />
-    )
+    render(<SourceTextPanel originalText="Original text" aiExtractedText={null} zoom={150} />)
     const textEl = screen.getByText("Original text")
     expect(textEl.style.fontSize).toBe("21px")
   })
 
   it("shows fallback when no text available", () => {
-    render(
-      <SourceTextPanel
-        originalText={null}
-        aiExtractedText={null}
-        zoom={100}
-      />
-    )
-    expect(screen.getByText("Original text not available — use the image above")).toBeInTheDocument()
+    render(<SourceTextPanel originalText={null} aiExtractedText={null} zoom={100} />)
+    expect(
+      screen.getByText("Original text not available — use the image above"),
+    ).toBeInTheDocument()
   })
 
   it("shows green badge for high confidence", () => {
@@ -168,7 +152,7 @@ describe("SourceTextPanel", () => {
         aiExtractedText="AI text"
         confidence={0.95}
         zoom={100}
-      />
+      />,
     )
     const badge = screen.getByText(/AI Extracted 95%/)
     expect(badge).toHaveStyle({ background: "#16A34A" })
@@ -181,7 +165,7 @@ describe("SourceTextPanel", () => {
         aiExtractedText="AI text"
         confidence={0.78}
         zoom={100}
-      />
+      />,
     )
     const badge = screen.getByText(/AI Extracted 78%/)
     expect(badge).toHaveStyle({ background: "#F59E0B" })
@@ -194,20 +178,14 @@ describe("SourceTextPanel", () => {
         aiExtractedText="AI text"
         confidence={0.45}
         zoom={100}
-      />
+      />,
     )
     const badge = screen.getByText(/AI Extracted 45%/)
     expect(badge).toHaveStyle({ background: "#DC2626" })
   })
 
   it("shows edit button when text is available", () => {
-    render(
-      <SourceTextPanel
-        originalText="Original text"
-        aiExtractedText={null}
-        zoom={100}
-      />
-    )
+    render(<SourceTextPanel originalText="Original text" aiExtractedText={null} zoom={100} />)
     expect(screen.getByText("Edit")).toBeInTheDocument()
   })
 
@@ -219,7 +197,7 @@ describe("SourceTextPanel", () => {
         zoom={100}
         sectionId="123"
         onSourceTextUpdate={vi.fn()}
-      />
+      />,
     )
     fireEvent.click(screen.getByText("Edit"))
     expect(screen.getByLabelText("Source text")).toBeInTheDocument()
@@ -235,7 +213,7 @@ describe("SourceTextPanel", () => {
         zoom={100}
         sectionId="123"
         onSourceTextUpdate={vi.fn()}
-      />
+      />,
     )
     fireEvent.click(screen.getByText("Edit"))
     fireEvent.click(screen.getByText("Cancel"))
@@ -251,11 +229,11 @@ describe("SourceTextPanel", () => {
         bookId="book-123"
         pageNumber={3}
         zoom={100}
-      />
+      />,
     )
     expect(screen.getByText("Edit original text →")).toHaveAttribute(
       "href",
-      "/books/book-123/pages/3"
+      "/books/book-123/pages/3",
     )
   })
 })

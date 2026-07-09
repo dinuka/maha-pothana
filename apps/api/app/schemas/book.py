@@ -35,6 +35,14 @@ class BookUpdate(BaseModel):
     translatorCount: int | None = None
 
 
+class BookStatsSummary(BaseModel):
+    totalSections: int = 0
+    translatedSections: int = 0
+    inProgressSections: int = 0
+    pendingSections: int = 0
+    translationPercent: float = 0
+
+
 class BookListItem(BaseModel):
     id: str
     title: str
@@ -44,4 +52,4 @@ class BookListItem(BaseModel):
     status: str
     thumbnailKey: str | None = None
     pageCount: int = 0
-    translatedPercent: float = 0
+    stats: BookStatsSummary = BookStatsSummary()

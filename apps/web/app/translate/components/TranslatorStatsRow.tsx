@@ -17,12 +17,7 @@ export const TranslatorStatsRow = ({ stat, isExpanded, onToggle }: TranslatorSta
 
   return (
     <div>
-      <button
-        style={styles.row}
-        onClick={onToggle}
-        type="button"
-        aria-expanded={isExpanded}
-      >
+      <button style={styles.row} onClick={onToggle} type="button" aria-expanded={isExpanded}>
         <div style={styles.nameCell}>{stat.userName}</div>
         <div style={styles.cell}>{stat.totalAssigned}</div>
         <div style={styles.cell}>{stat.approvedCount}</div>
@@ -33,9 +28,7 @@ export const TranslatorStatsRow = ({ stat, isExpanded, onToggle }: TranslatorSta
       </button>
       {isExpanded && (
         <div style={styles.expanded}>
-          <div style={styles.expandedHeader}>
-            {stat.userName} — Recent Activity
-          </div>
+          <div style={styles.expandedHeader}>{stat.userName} — Recent Activity</div>
           <div style={styles.emptyActivity}>No recent activity to display</div>
         </div>
       )}

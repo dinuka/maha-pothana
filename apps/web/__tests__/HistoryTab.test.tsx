@@ -38,7 +38,7 @@ describe("HistoryTab", () => {
       React.createElement(HistoryTab, {
         filters: mockFilters,
         onSectionClick: vi.fn(),
-      })
+      }),
     )
 
     expect(screen.getByText("Loading history...")).toBeInTheDocument()
@@ -73,7 +73,7 @@ describe("HistoryTab", () => {
       React.createElement(HistoryTab, {
         filters: mockFilters,
         onSectionClick: vi.fn(),
-      })
+      }),
     )
 
     await waitFor(() => {
@@ -98,7 +98,7 @@ describe("HistoryTab", () => {
       React.createElement(HistoryTab, {
         filters: mockFilters,
         onSectionClick: vi.fn(),
-      })
+      }),
     )
 
     await waitFor(() => {

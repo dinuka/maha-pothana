@@ -194,14 +194,14 @@ The current translation UI (`/translate` and `/translate/[sectionId]`) is minima
 
 ## Implementation Priority
 
-| Priority | Story                                                              | Effort | Impact                                                        |
-| -------- | ------------------------------------------------------------------ | ------ | ------------------------------------------------------------- |
-| P0       | US-TR-5: View translation context with source text side-by-side   | Small  | Critical — translators lack source text reference today        |
-| P0       | US-TR-1: View translation history                                 | Medium | High — translators have no visibility into past work           |
-| P1       | US-TR-2: Book translation statistics dashboard                    | Medium | High — editors lack progress visibility                        |
-| P1       | US-TR-4: Filter translations by language and page                 | Medium | High — no way to focus on specific work                       |
-| P2       | US-TR-3: Translator performance stats                             | Medium | Medium — useful for editor decision-making                    |
-| P2       | US-TR-6: Auto-save translation drafts                             | Medium | Medium — prevents data loss, quality of life                  |
+| Priority | Story                                                           | Effort | Impact                                                  |
+| -------- | --------------------------------------------------------------- | ------ | ------------------------------------------------------- |
+| P0       | US-TR-5: View translation context with source text side-by-side | Small  | Critical — translators lack source text reference today |
+| P0       | US-TR-1: View translation history                               | Medium | High — translators have no visibility into past work    |
+| P1       | US-TR-2: Book translation statistics dashboard                  | Medium | High — editors lack progress visibility                 |
+| P1       | US-TR-4: Filter translations by language and page               | Medium | High — no way to focus on specific work                 |
+| P2       | US-TR-3: Translator performance stats                           | Medium | Medium — useful for editor decision-making              |
+| P2       | US-TR-6: Auto-save translation drafts                           | Medium | Medium — prevents data loss, quality of life            |
 
 ---
 

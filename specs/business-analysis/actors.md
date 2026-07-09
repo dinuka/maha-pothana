@@ -11,24 +11,6 @@
 
 ## Permissions Matrix
 
-<<<<<<< Updated upstream
-| Feature                            | Super Admin | Editor | Translator |
-| ---------------------------------- | :---------: | :----: | :--------: |
-| Manage users & roles               |     ✅      |   ❌   |     ❌     |
-| Upload books                       |     ✅      |   ✅   |     ❌     |
-| View book list                     |     ✅      |   ✅   |     ✅     |
-| Process pages (section detection)  |     ✅      |   ✅   |     ❌     |
-| Modify sections (add/edit/delete)  |     ✅      |   ✅   |     ❌     |
-| Translate sections                 |     ✅      |   ❌   |     ✅     |
-| View translation UI                |     ✅      |   ✅   |     ✅     |
-| Approve/reject translations        |     ✅      |   ✅   |     ❌     |
-| Provide own translation (override) |     ✅      |   ✅   |     ❌     |
-| Set translators per book           |     ✅      |   ✅   |     ❌     |
-| Build finalized book               |     ✅      |   ✅   |     ❌     |
-| Invite users to book               |     ✅      |   ✅   |     ❌     |
-| Block translators from book        |     ✅      |   ✅   |     ❌     |
-| Add translator comments            |     ✅      |   ✅   |     ✅     |
-=======
 | Feature                               | Super Admin | Editor | Translator |
 | ------------------------------------- | :---------: | :----: | :--------: |
 | Manage users & roles                  |     ✅      |   ❌   |     ❌     |
@@ -60,10 +42,11 @@
 | Trigger AI text extraction            |     ✅      |   ✅   |     ❌     |
 | View AI extraction confidence score   |     ✅      |   ✅   |     ✅     |
 | Regenerate AI transliteration         |     ✅      |   ✅   |     ❌     |
->>>>>>> Stashed changes
 
 ## Notes
 
 - Every user is automatically assigned both **Editor** and **Translator** roles on signup
 - Super Admin can later revoke or modify roles per user
 - Editors can only manage books they own or are assigned to
+- The page canvas editor (Konva-based) is available only to Editors and Super Admins
+- Translators can view the page canvas only in read-only context (page context toggle in translation UI)

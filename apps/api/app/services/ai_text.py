@@ -8,19 +8,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-EXTRACTION_MODELS = [
-    "google/gemma-4-31b-it:free",
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-    "google/gemma-4-26b-a4b-it:free",
-]
+EXTRACTION_MODELS = settings.openrouter_extraction_models
 EXTRACTION_MODEL = EXTRACTION_MODELS[0]
-TRANSLITERATION_MODELS = [
-    "google/gemma-4-31b-it:free",
-    "openai/gpt-oss-120b:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free",
-]
+TRANSLITERATION_MODELS = settings.openrouter_transliteration_models
 TRANSLITERATION_MODEL = TRANSLITERATION_MODELS[0]
-CONFIDENCE_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+CONFIDENCE_MODEL = settings.openrouter_confidence_model
 EXTRACTION_TIMEOUT = 60
 CONFIDENCE_TIMEOUT = 30
 TRANSLITERATION_TIMEOUT = 120
@@ -392,7 +384,17 @@ async def reverse_transliterate_text(
             "- Output only the original script (Devanagari or IAST).\n"
             "- Preserve punctuation.\n"
             "- Preserve spaces.\n"
-            "- Preserve visarga, anusvara, chandrabindu, and conjunct consonants.\n\n"
+            "- Preserve visarga, anusvara, chandrabindu, and conjunct consonants.\n"
+            "- Sinhala anusvara (ං, binduva) MUST map to Devanagari anusvara (ं), never to म् (virama-ma). "
+            "Do NOT normalize anusvara into its nasal consonant equivalent (e.g. කලං -> कलं, NOT कलम्).\n"
+            "- Do NOT apply grammatical correction or standardization; reproduce the exact orthography implied by the input.\n\n"
+            "Examples:\n\n"
+            "ධර්මඃ\n"
+            "→ धर्मः\n\n"
+            "කෘෂ්ණඃ\n"
+            "→ कृष्णः\n\n"
+            "කලං\n"
+            "→ कलं\n\n"
             f"Input:\n{transliterated_text}\n\n"
             "Output:"
         )

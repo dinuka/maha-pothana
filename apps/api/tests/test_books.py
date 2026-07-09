@@ -17,6 +17,50 @@ async def test_list_books(client, mock_db, sample_book):
     assert len(data) == 1
     assert data[0]["title"] == "Test Book"
     assert data[0]["pageCount"] == 5
+    assert data[0]["stats"] == {
+        "totalSections": 0,
+        "translatedSections": 0,
+        "inProgressSections": 0,
+        "pendingSections": 0,
+        "translationPercent": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_books_includes_batched_stats(client, mock_db, sample_book):
+    book_id = str(sample_book["_id"])
+    mock_db.books.find.return_value.to_list = AsyncMock(return_value=[sample_book])
+    mock_db.pages.count_documents = AsyncMock(return_value=5)
+    mock_db.book_stats.find.return_value.to_list = AsyncMock(return_value=[
+        {
+            "bookId": book_id,
+            "stats": {
+                "totalSections": 10,
+                "translatedSections": 4,
+                "inProgressSections": 3,
+                "pendingSections": 3,
+                "translationPercent": 40.0,
+                "byLanguage": {},
+                "byPage": [],
+            },
+            "translatorStats": [],
+        }
+    ])
+
+    response = await client.get("/api/books", headers={
+        "Authorization": "Bearer test-token",
+    })
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["stats"] == {
+        "totalSections": 10,
+        "translatedSections": 4,
+        "inProgressSections": 3,
+        "pendingSections": 3,
+        "translationPercent": 40.0,
+    }
+    mock_db.book_stats.find.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -138,6 +182,7 @@ async def test_delete_book_not_found(client, mock_db):
 @pytest.mark.asyncio
 async def test_build_book(client, mock_db, sample_book):
     mock_db.books.find_one = AsyncMock(return_value=sample_book)
+    mock_db.pages.count_documents = AsyncMock(side_effect=[2, 2])
 
     with patch("app.tasks.build_book.build_book") as mock_build:
         response = await client.post(
@@ -155,3 +200,17 @@ async def test_build_book_not_found(client, mock_db):
 
     response = await client.post("/api/books/507f1f77bcf86cd799439999/build")
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_build_book_blocked_when_pages_not_finalized(client, mock_db, sample_book):
+    mock_db.books.find_one = AsyncMock(return_value=sample_book)
+    mock_db.pages.count_documents = AsyncMock(side_effect=[2, 1])
+
+    with patch("app.tasks.build_book.build_book") as mock_build:
+        response = await client.post(
+            f'/api/books/{sample_book["_id"]}/build'
+        )
+
+    assert response.status_code == 400
+    mock_build.delay.assert_not_called()

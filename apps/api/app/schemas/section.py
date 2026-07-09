@@ -44,6 +44,9 @@ class NextSectionResponse(BaseModel):
     aiExtractedText: str | None = None
     exactLetterTranslation: str | None = None
     autoTranslatedText: str | None = None
+    wordByWordMeaning: str | None = None
+    fullMeaning: str | None = None
+    simplifiedMeaning: str | None = None
     pageNumber: int
     bookTitle: str
     book: BookRef

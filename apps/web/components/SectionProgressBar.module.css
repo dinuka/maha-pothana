@@ -1,0 +1,53 @@
+.wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.track {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--border);
+}
+
+.trackSm {
+  height: 8px;
+}
+
+.trackMd {
+  height: 12px;
+}
+
+.segment {
+  height: 100%;
+}
+
+.approved {
+  background: var(--primary);
+}
+
+.inProgress {
+  background: #eab308;
+}
+
+.label {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.labelSm {
+  font-size: 12px;
+}
+
+.labelMd {
+  font-size: 14px;
+}
+
+.empty {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+}

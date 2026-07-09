@@ -16,9 +16,8 @@ const statusConfig = {
 
 export const HistoryItem = ({ item, onClick }: HistoryItemProps) => {
   const config = statusConfig[item.action] ?? statusConfig.SUBMITTED
-  const snippet = item.translatedText.length > 80
-    ? `${item.translatedText.slice(0, 80)}...`
-    : item.translatedText
+  const snippet =
+    item.translatedText.length > 80 ? `${item.translatedText.slice(0, 80)}...` : item.translatedText
 
   const formattedDate = new Date(item.createdAt).toLocaleDateString("en-US", {
     month: "short",
@@ -28,11 +27,7 @@ export const HistoryItem = ({ item, onClick }: HistoryItemProps) => {
   })
 
   return (
-    <button
-      style={styles.container}
-      onClick={() => onClick?.(item.sectionId)}
-      type="button"
-    >
+    <button style={styles.container} onClick={() => onClick?.(item.sectionId)} type="button">
       <div style={styles.content}>
         <div style={styles.info}>
           <div style={styles.location}>

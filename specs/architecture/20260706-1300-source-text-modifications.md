@@ -15,16 +15,16 @@ Introduce AI-powered text extraction and bidirectional transliteration for Indic
 
 ## 2. Key Technical Decisions
 
-| Decision | Choice | Rationale |
-| --- | --- | --- |
-| AI provider (text extraction) | **OpenAI GPT-4o Vision API** | Best-in-class OCR for Indic scripts; handles complex ligatures/conjuncts that Tesseract fails on; API is simple (base64 image → text); cost is ~$0.005 per section image |
-| AI provider (transliteration) | **OpenAI GPT-4o (text-only)** | Same model family, no separate integration needed; prompt-based transliteration is accurate for Indic scripts; ~$0.001 per call |
-| Extraction trigger | **On demand (editor-initiated)** | Editors control when to extract; avoids wasting API calls on unused sections; batch mode available for bulk extraction |
-| Transliteration trigger | **On demand (translator-initiated)** | Translator clicks "Transliterate" per section; avoids generating transliterations for sections that may never be translated |
-| Failure fallback | **Keep OCR text** | If AI extraction fails, `originalText` remains the source; translators are never blocked; error logged in `AITextExtraction.rawResponse` |
-| Caching | **MongoDB collections** | `AITextExtraction` (one per section, unique) and `Transliteration` (one per section+targetScript, unique); cache-first lookup before API call |
-| Concurrency control | **Redis semaphore** | Max 5 concurrent AI API calls; prevents rate limiting and cost spikes |
-| Cost control | **Per-book cost limit** | Configurable in admin settings; estimated cost shown before batch execution; enforced server-side |
+| Decision                      | Choice                               | Rationale                                                                                                                                                                |
+| ----------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AI provider (text extraction) | **OpenAI GPT-4o Vision API**         | Best-in-class OCR for Indic scripts; handles complex ligatures/conjuncts that Tesseract fails on; API is simple (base64 image → text); cost is ~$0.005 per section image |
+| AI provider (transliteration) | **OpenAI GPT-4o (text-only)**        | Same model family, no separate integration needed; prompt-based transliteration is accurate for Indic scripts; ~$0.001 per call                                          |
+| Extraction trigger            | **On demand (editor-initiated)**     | Editors control when to extract; avoids wasting API calls on unused sections; batch mode available for bulk extraction                                                   |
+| Transliteration trigger       | **On demand (translator-initiated)** | Translator clicks "Transliterate" per section; avoids generating transliterations for sections that may never be translated                                              |
+| Failure fallback              | **Keep OCR text**                    | If AI extraction fails, `originalText` remains the source; translators are never blocked; error logged in `AITextExtraction.rawResponse`                                 |
+| Caching                       | **MongoDB collections**              | `AITextExtraction` (one per section, unique) and `Transliteration` (one per section+targetScript, unique); cache-first lookup before API call                            |
+| Concurrency control           | **Redis semaphore**                  | Max 5 concurrent AI API calls; prevents rate limiting and cost spikes                                                                                                    |
+| Cost control                  | **Per-book cost limit**              | Configurable in admin settings; estimated cost shown before batch execution; enforced server-side                                                                        |
 
 ---
 
@@ -200,9 +200,9 @@ Generates a transliteration for a section's source text.
 
 **Query Parameters:**
 
-| Param | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `targetScript` | string | Yes | Target script name (e.g. "sinhala", "devanagari", "tamil") |
+| Param          | Type   | Required | Notes                                                      |
+| -------------- | ------ | -------- | ---------------------------------------------------------- |
+| `targetScript` | string | Yes      | Target script name (e.g. "sinhala", "devanagari", "tamil") |
 
 **Response (200):** Cached result
 
@@ -282,6 +282,7 @@ Updates the source text (AI-extracted or OCR) and triggers re-transliteration (U
 ```
 
 **Behavior:**
+
 - If `source` is `"ai"`, updates `Section.aiExtractedText`
 - If `source` is `"ocr"`, updates `Section.originalText`
 - Invalidates any cached transliterations for this section (they become stale)
@@ -722,11 +723,12 @@ interface SourceTextPanelProps {
   bookId?: string
   pageNumber?: number
   zoom: number
-  onExtract?: () => void  // editor-only
+  onExtract?: () => void // editor-only
 }
 ```
 
 **Behavior:**
+
 - Default view: shows AI text if available, otherwise OCR
 - Toggle switches between AI and OCR views
 - "Extract Text" button visible to editors when no AI extraction exists
@@ -748,6 +750,7 @@ interface TranslationEditorProps {
 ```
 
 **Behavior:**
+
 - "Transliterate" button appears when `aiExtractedText` exists and `exactLetterTranslation` is empty
 - Clicking triggers `POST /api/sections/{id}/transliterate?targetScript={lang}`
 - While loading, button shows spinner
@@ -761,27 +764,27 @@ interface TranslationEditorProps {
 
 ### 8.1 MongoDB Collections
 
-| Collection | Key | TTL | Notes |
-| --- | --- | --- | --- |
-| `ai_text_extractions` | `{ sectionId: 1 }` unique | None | One extraction per section; idempotent (re-run replaces) |
-| `transliterations` | `{ translationId: 1 }` unique | None | One transliteration per translation document |
-| `system_config` | `{ key: 1 }` unique | None | Key-value config store |
+| Collection            | Key                           | TTL  | Notes                                                    |
+| --------------------- | ----------------------------- | ---- | -------------------------------------------------------- |
+| `ai_text_extractions` | `{ sectionId: 1 }` unique     | None | One extraction per section; idempotent (re-run replaces) |
+| `transliterations`    | `{ translationId: 1 }` unique | None | One transliteration per translation document             |
+| `system_config`       | `{ key: 1 }` unique           | None | Key-value config store                                   |
 
 ### 8.2 Redis Keys
 
-| Key Pattern | TTL | Purpose |
-| --- | --- | --- |
+| Key Pattern                    | TTL    | Purpose                                              |
+| ------------------------------ | ------ | ---------------------------------------------------- |
 | `{bookId}:extraction:progress` | 1 hour | Batch extraction progress (total, completed, failed) |
-| `extraction:semaphore` | None | Redis semaphore for max 5 concurrent AI calls |
-| `stats:book:{bookId}` | 30s | Existing stats cache (now includes extractionStats) |
+| `extraction:semaphore`         | None   | Redis semaphore for max 5 concurrent AI calls        |
+| `stats:book:{bookId}`          | 30s    | Existing stats cache (now includes extractionStats)  |
 
 ### 8.3 Frontend Cache (React Query)
 
-| Query Key | staleTime | Notes |
-| --- | --- | --- |
-| `['extraction', sectionId]` | 0 | Always refetch (extraction may complete in background) |
-| `['transliterations', sectionId]` | 60s | Cache transliterations for 1 minute |
-| `['extractionStatus', bookId]` | 5s | Poll batch progress frequently during extraction |
+| Query Key                         | staleTime | Notes                                                  |
+| --------------------------------- | --------- | ------------------------------------------------------ |
+| `['extraction', sectionId]`       | 0         | Always refetch (extraction may complete in background) |
+| `['transliterations', sectionId]` | 60s       | Cache transliterations for 1 minute                    |
+| `['extractionStatus', bookId]`    | 5s        | Poll batch progress frequently during extraction       |
 
 ---
 
@@ -789,24 +792,24 @@ interface TranslationEditorProps {
 
 ### 9.1 AI Extraction Failure
 
-| Error | Handling |
-| --- | --- |
-| OpenAI API timeout (30s) | Retry up to 3 times with exponential backoff |
-| OpenAI API rate limit (429) | Wait and retry; semaphore prevents this from happening |
-| OpenAI API error (500, 503) | Log error, mark extraction as FAILED, keep OCR text |
-| Invalid response (no text extracted) | Save empty text, confidence = 0.0, mark as FAILED |
-| Image too large (>20MB) | Resize to fit within limit before sending |
-| Network error | Retry up to 3 times |
+| Error                                | Handling                                               |
+| ------------------------------------ | ------------------------------------------------------ |
+| OpenAI API timeout (30s)             | Retry up to 3 times with exponential backoff           |
+| OpenAI API rate limit (429)          | Wait and retry; semaphore prevents this from happening |
+| OpenAI API error (500, 503)          | Log error, mark extraction as FAILED, keep OCR text    |
+| Invalid response (no text extracted) | Save empty text, confidence = 0.0, mark as FAILED      |
+| Image too large (>20MB)              | Resize to fit within limit before sending              |
+| Network error                        | Retry up to 3 times                                    |
 
 **Fallback behavior:** Every extraction failure is non-fatal. The section retains its `originalText` (OCR). The UI shows "Extraction failed — using OCR text" with a retry button.
 
 ### 9.2 Transliteration Failure
 
-| Error | Handling |
-| --- | --- |
-| No source text available | Return 422 with message "Run AI extraction first" |
-| OpenAI API error | Return error message, leave exactLetterTranslation empty |
-| Invalid source script detection | Default to book's `sourceLanguage` |
+| Error                           | Handling                                                 |
+| ------------------------------- | -------------------------------------------------------- |
+| No source text available        | Return 422 with message "Run AI extraction first"        |
+| OpenAI API error                | Return error message, leave exactLetterTranslation empty |
+| Invalid source script detection | Default to book's `sourceLanguage`                       |
 
 **Fallback behavior:** Translator sees "Transliteration unavailable — enter manually" and can type the transliteration by hand.
 
@@ -823,20 +826,20 @@ interface TranslationEditorProps {
 
 ### 10.1 Per-Call Costs (OpenAI GPT-4o)
 
-| Operation | Input Tokens | Output Tokens | Cost (USD) |
-| --- | --- | --- | --- |
-| Text extraction (Vision) | ~1000 | ~500 | ~$0.005 |
-| Confidence scoring | ~200 | ~10 | ~$0.001 |
-| Transliteration | ~200 | ~200 | ~$0.001 |
-| **Total per section** | | | **~$0.007** |
+| Operation                | Input Tokens | Output Tokens | Cost (USD)  |
+| ------------------------ | ------------ | ------------- | ----------- |
+| Text extraction (Vision) | ~1000        | ~500          | ~$0.005     |
+| Confidence scoring       | ~200         | ~10           | ~$0.001     |
+| Transliteration          | ~200         | ~200          | ~$0.001     |
+| **Total per section**    |              |               | **~$0.007** |
 
 ### 10.2 Batch Estimates
 
-| Book Size | Sections | Extraction Cost | Transliteration Cost | Total |
-| --- | --- | --- | --- | --- |
-| Small (50 pages) | ~200 | $1.40 | $0.20 | $1.60 |
-| Medium (200 pages) | ~800 | $5.60 | $0.80 | $6.40 |
-| Large (500 pages) | ~2000 | $14.00 | $2.00 | $16.00 |
+| Book Size          | Sections | Extraction Cost | Transliteration Cost | Total  |
+| ------------------ | -------- | --------------- | -------------------- | ------ |
+| Small (50 pages)   | ~200     | $1.40           | $0.20                | $1.60  |
+| Medium (200 pages) | ~800     | $5.60           | $0.80                | $6.40  |
+| Large (500 pages)  | ~2000    | $14.00          | $2.00                | $16.00 |
 
 ### 10.3 Cost Control Mechanisms
 
@@ -850,43 +853,43 @@ interface TranslationEditorProps {
 
 ## 11. New Backend Files
 
-| File | Purpose |
-| --- | --- |
-| `app/services/ai_text.py` | OpenAI Vision + GPT-4o integration for extraction and transliteration |
-| `app/tasks/extract_section_text.py` | Celery task for single-section extraction |
-| `app/tasks/batch_extract_book.py` | Celery task for batch extraction with progress tracking |
-| `app/tasks/transliterate_section.py` | Celery task for transliteration |
-| `app/api/extraction.py` | API routes for extraction and transliteration endpoints |
-| `app/api/admin_settings.py` | API routes for admin configuration |
-| `app/schemas/extraction.py` | Pydantic models for extraction/transliteration requests/responses |
-| `app/schemas/admin.py` | Pydantic models for admin config |
+| File                                 | Purpose                                                               |
+| ------------------------------------ | --------------------------------------------------------------------- |
+| `app/services/ai_text.py`            | OpenAI Vision + GPT-4o integration for extraction and transliteration |
+| `app/tasks/extract_section_text.py`  | Celery task for single-section extraction                             |
+| `app/tasks/batch_extract_book.py`    | Celery task for batch extraction with progress tracking               |
+| `app/tasks/transliterate_section.py` | Celery task for transliteration                                       |
+| `app/api/extraction.py`              | API routes for extraction and transliteration endpoints               |
+| `app/api/admin_settings.py`          | API routes for admin configuration                                    |
+| `app/schemas/extraction.py`          | Pydantic models for extraction/transliteration requests/responses     |
+| `app/schemas/admin.py`               | Pydantic models for admin config                                      |
 
 ### Updated Files
 
-| File | Changes |
-| --- | --- |
-| `app/schemas/section.py` | Add `aiExtractedText`, `extractionStatus` to response models |
-| `app/tasks/crop_sections.py` | Optionally trigger extraction after crop |
-| `app/db/indexes.py` | Add indexes for `ai_text_extractions`, `transliterations`, `system_config` |
-| `app/main.py` | Register new routers |
+| File                         | Changes                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `app/schemas/section.py`     | Add `aiExtractedText`, `extractionStatus` to response models               |
+| `app/tasks/crop_sections.py` | Optionally trigger extraction after crop                                   |
+| `app/db/indexes.py`          | Add indexes for `ai_text_extractions`, `transliterations`, `system_config` |
+| `app/main.py`                | Register new routers                                                       |
 
 ---
 
 ## 12. New Frontend Files
 
-| File | Purpose |
-| --- | --- |
-| `app/translate/components/ExtractionStatusBadge.tsx` | Confidence badge (green/yellow/red) |
-| `app/translate/components/TransliterateButton.tsx` | Transliterate action with loading state |
-| `lib/api/extraction.ts` | API client for extraction/transliteration endpoints |
-| `hooks/useExtraction.ts` | Hook for polling extraction status |
+| File                                                 | Purpose                                             |
+| ---------------------------------------------------- | --------------------------------------------------- |
+| `app/translate/components/ExtractionStatusBadge.tsx` | Confidence badge (green/yellow/red)                 |
+| `app/translate/components/TransliterateButton.tsx`   | Transliterate action with loading state             |
+| `lib/api/extraction.ts`                              | API client for extraction/transliteration endpoints |
+| `hooks/useExtraction.ts`                             | Hook for polling extraction status                  |
 
 ### Updated Files
 
-| File | Changes |
-| --- | --- |
-| `app/translate/TranslateTab.tsx` | Shared zoom state, extraction/transliteration integration |
-| `app/translate/components/SourceTextPanel.tsx` | AI/OCR toggle, confidence badge, extract button |
+| File                                           | Changes                                                   |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| `app/translate/TranslateTab.tsx`               | Shared zoom state, extraction/transliteration integration |
+| `app/translate/components/SourceTextPanel.tsx` | AI/OCR toggle, confidence badge, extract button           |
 
 ---
 
@@ -906,14 +909,14 @@ await db.system_config.create_index("key", unique=True)
 
 ## 14. Implementation Order
 
-| Phase | Stories | Backend | Frontend | Effort |
-| --- | --- | --- | --- | --- |
-| **Phase 1** | US-ST-1 | `ai_text.py`, `extract_section_text.py`, `extraction.py`, `extraction.py` schema | `ExtractionStatusBadge.tsx`, update `SourceTextPanel.tsx` | 2 days |
-| **Phase 2** | US-ST-3 | Update `SectionResponse` schema, update `auto_translate` task | Update `TranslateTab.tsx` (AI/OCR toggle) | 0.5 days |
-| **Phase 3** | US-ST-2 | `transliterate_section.py`, update `extraction.py` router | `TransliterateButton.tsx`, update `TranslationEditor` | 1 day |
-| **Phase 4** | US-ST-4 | Update stats aggregation, `extractionStatus` field | Update book console with extraction overlay | 1 day |
-| **Phase 5** | US-ST-5 | `batch_extract_book.py`, Redis progress tracking | Batch progress UI, "Extract All" button | 1.5 days |
-| **Phase 6** | US-ST-6 | `admin_settings.py`, `system_config` collection | Admin settings page | 1 day |
+| Phase       | Stories | Backend                                                                          | Frontend                                                  | Effort   |
+| ----------- | ------- | -------------------------------------------------------------------------------- | --------------------------------------------------------- | -------- |
+| **Phase 1** | US-ST-1 | `ai_text.py`, `extract_section_text.py`, `extraction.py`, `extraction.py` schema | `ExtractionStatusBadge.tsx`, update `SourceTextPanel.tsx` | 2 days   |
+| **Phase 2** | US-ST-3 | Update `SectionResponse` schema, update `auto_translate` task                    | Update `TranslateTab.tsx` (AI/OCR toggle)                 | 0.5 days |
+| **Phase 3** | US-ST-2 | `transliterate_section.py`, update `extraction.py` router                        | `TransliterateButton.tsx`, update `TranslationEditor`     | 1 day    |
+| **Phase 4** | US-ST-4 | Update stats aggregation, `extractionStatus` field                               | Update book console with extraction overlay               | 1 day    |
+| **Phase 5** | US-ST-5 | `batch_extract_book.py`, Redis progress tracking                                 | Batch progress UI, "Extract All" button                   | 1.5 days |
+| **Phase 6** | US-ST-6 | `admin_settings.py`, `system_config` collection                                  | Admin settings page                                       | 1 day    |
 
 **Total estimated effort: ~7 days**
 
@@ -923,21 +926,21 @@ await db.system_config.create_index("key", unique=True)
 
 ### Backend Tests
 
-| Test File | Covers |
-| --- | --- |
-| `tests/test_ai_text.py` | `extract_text()`, `transliterate_text()`, confidence scoring, error handling |
-| `tests/test_extract_section.py` | Single extraction endpoint, idempotency, semaphore, retry logic |
-| `tests/test_batch_extract.py` | Batch extraction, progress tracking, cost limit enforcement |
-| `tests/test_transliterate.py` | Transliteration endpoint, cache hit/miss, fallback |
-| `tests/test_admin_settings.py` | Config CRUD, default values |
+| Test File                       | Covers                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| `tests/test_ai_text.py`         | `extract_text()`, `transliterate_text()`, confidence scoring, error handling |
+| `tests/test_extract_section.py` | Single extraction endpoint, idempotency, semaphore, retry logic              |
+| `tests/test_batch_extract.py`   | Batch extraction, progress tracking, cost limit enforcement                  |
+| `tests/test_transliterate.py`   | Transliteration endpoint, cache hit/miss, fallback                           |
+| `tests/test_admin_settings.py`  | Config CRUD, default values                                                  |
 
 ### Frontend Tests
 
-| Test File | Covers |
-| --- | ---|
-| `__tests__/SourceTextPanel.test.tsx` | AI/OCR toggle, confidence badge, extract button visibility |
-| `__tests__/TransliterateButton.test.tsx` | Loading state, pre-fill, error state |
-| `__tests__/TranslateTab.test.tsx` | Shared zoom, extraction integration |
+| Test File                                | Covers                                                     |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| `__tests__/SourceTextPanel.test.tsx`     | AI/OCR toggle, confidence badge, extract button visibility |
+| `__tests__/TransliterateButton.test.tsx` | Loading state, pre-fill, error state                       |
+| `__tests__/TranslateTab.test.tsx`        | Shared zoom, extraction integration                        |
 
 ---
 
