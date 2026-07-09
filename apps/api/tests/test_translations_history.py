@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock
 from datetime import datetime, timezone
+from bson import ObjectId
 
 
 @pytest.mark.asyncio
@@ -8,6 +9,7 @@ async def test_get_translation_history(client, mock_db, sample_book, sample_tran
     mock_db.books.find_one = AsyncMock(return_value=sample_book)
 
     activity_item = {
+        "_id": ObjectId(),
         "translationId": str(sample_translation["_id"]),
         "sectionId": sample_translation["section"]["id"],
         "bookId": str(sample_book["_id"]),

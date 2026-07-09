@@ -344,21 +344,103 @@ This test plan covers the core features of the Maha Pothana book translation pla
 
 ### 6. Book Organization & Publishing
 
-| TC-ID  | Scenario                      | Steps                                                                   | Expected Result                                                                                              |
-| ------ | ----------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| ORG-01 | Reorder pages                 | 1. Drag page in list to new position                                    | Page order updated                                                                                           |
-| ORG-02 | Delete page                   | 1. Click delete on page 2. Confirm                                      | Page removed. Sections cascade deleted.                                                                      |
-| ORG-03 | Filter by status              | 1. Click "Completed" filter                                             | Only completed pages shown                                                                                   |
-| ORG-04 | Sort by progress              | 1. Select sort by "Progress %"                                          | Pages sorted ascending/descending                                                                            |
-| ORG-05 | Review translations           | 1. Open section with translations 2. View side-by-side                  | All N translations shown with translator info. Exact letter field shown if provided.                         |
-| ORG-06 | Approve multiple translations | 1. Click "Approve" on Translation A 2. Click "Approve" on Translation B | Both marked approved with star badges                                                                        |
-| ORG-07 | Reject a translation          | 1. Click "Reject" on a translation                                      | Translation marked with strikethrough + "Rejected" badge                                                     |
-| ORG-08 | Reject all translations       | 1. Click "Reject All"                                                   | Section re-enters translation pool. Message: "All translations rejected. Translators will need to resubmit." |
-| ORG-09 | Editor override translation   | 1. Type own translation 2. Click "Write your own"                       | Editor's version saved as approved translation                                                               |
-| ORG-10 | Resubmit after rejection      | 1. Editor rejects all 2. Translator opens section again                 | Section appears in queue for re-translation                                                                  |
-| ORG-11 | Build finalized book          | 1. Click "Build" 2. Wait for processing                                 | Book build status: BUILDING → COMPLETED. Download link appears.                                              |
-| ORG-12 | Download finalized book       | 1. Click Download                                                       | PDF downloaded using original page numbers for labels                                                        |
-| ORG-13 | Rebuild book                  | 1. Make changes 2. Click "Build" again                                  | New PDF overwrites previous in S3                                                                            |
+#### 6a. Page Organization (US-5.1)
+
+| TC-ID  | Scenario                        | Steps                                       | Expected Result                                                                                   |
+| ------ | ------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| ORG-01 | Drag reorder page               | 1. Drag page to new position in list        | Page order updates, `order` field reflects new position, `pageNumber` unchanged                   |
+| ORG-02 | Reorder persists on reload      | 1. Reorder pages 2. Refresh page            | New order preserved                                                                               |
+| ORG-03 | Add blank page                  | 1. Click "Add Page" between pages           | New Page with pageNumber=0, originalPageNumber="inserted", order at insertion point               |
+| ORG-04 | Delete page                     | 1. Click delete 2. Confirm in dialog        | Page + all child sections/translations/comments deleted. Remaining orders compacted.              |
+| ORG-05 | Delete prevents last page       | 1. Try to delete only page                  | Delete disabled with tooltip "Book must have at least one page"                                   |
+| ORG-06 | Reorder conflict detection      | 1. Two editors reorder simultaneously       | Toast "Page order was modified by another editor — refresh"                                       |
+| ORG-07 | Reorder undo                    | 1. Reorder pages 2. Press Ctrl+Z            | Order reverts to previous state                                                                   |
+| ORG-08 | Add sections to blank page      | 1. Create blank page 2. Open canvas editor  | Sections can be added/detected on blank page just like regular pages                              |
+| ORG-09 | Delete page confirmation dialog | 1. Click delete on page                     | Dialog shows "Delete Page N?" with section count and warning text. Cancel closes, Delete removes. |
+| ORG-10 | Page history panel              | 1. Open page editor with confirmed sections | History timeline shows past saves with timestamps and editor names                                |
+| ORG-11 | Restore section snapshot        | 1. Click restore on historical snapshot     | Sections replaced with historical version                                                         |
+| ORG-12 | Section edit history tracked    | 1. Edit sections 2. Save changes            | New SectionEditHistory entry created for each save                                                |
+| ORG-13 | Big page list (500+ pages)      | 1. Reorder near bottom of long list         | Auto-scroll during drag works, performance acceptable                                             |
+
+#### 6b. Filter & Sort (US-5.2)
+
+| TC-ID  | Scenario                        | Steps                                    | Expected Result                                                |
+| ------ | ------------------------------- | ---------------------------------------- | -------------------------------------------------------------- |
+| FLT-01 | Filter by status - All          | 1. Click "All" filter                    | All pages shown                                                |
+| FLT-02 | Filter by status - Completed    | 1. Click "Completed" filter              | Only pages with 100% approved sections shown                   |
+| FLT-03 | Filter by status - Not Started  | 1. Click "Not Started" filter            | Pages with 0 submitted translations shown                      |
+| FLT-04 | Filter by status - In Progress  | 1. Click "In Progress" filter            | Pages with partial translation shown                           |
+| FLT-05 | Filter by status - Needs Review | 1. Click "Needs Review" filter           | Pages with all sections submitted, awaiting approval           |
+| FLT-06 | Sort by page order (asc)        | 1. Select sort -> Page Order Asc         | Ordered by `order` ascending                                   |
+| FLT-07 | Sort by translation % (desc)    | 1. Select sort -> % Descending           | Most complete pages first                                      |
+| FLT-08 | Filter + sort combination       | 1. Filter=Completed 2. Sort=% Asc        | Completed pages sorted least-to-most complete                  |
+| FLT-09 | Filter state in URL             | 1. Set filter=in_progress 2. Reload page | Filter persists from URL                                       |
+| FLT-10 | Progress bar colors             | 1. View pages at 0%, 50%, 100%           | 0%=gray, 1-99%=blue, 100%=green                                |
+| FLT-11 | Summary stats bar               | 1. View page list                        | Shows total pages, sections, translated, pending, completion % |
+| FLT-12 | Empty filter result             | 1. Filter matching zero pages            | "No pages match filter" with "Clear filter" CTA                |
+| FLT-13 | Pre-detection state             | 1. Book with no sections on pages        | "Process pages first to see translation progress"              |
+| FLT-14 | Sticky filter bar               | 1. Scroll through long page list         | Filter/sort bar remains visible                                |
+
+#### 6c. Translation Review (US-5.3)
+
+| TC-ID  | Scenario                            | Steps                                                 | Expected Result                                                                  |
+| ------ | ----------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| REV-01 | View all translations for section   | 1. Open review console for section                    | All N submitted translations displayed side by side                              |
+| REV-02 | Approve one translation             | 1. Click Approve on translation A                     | Translation A gets green "Approved" badge. isApproved=true                       |
+| REV-03 | Approve multiple translations       | 1. Approve A 2. Approve B                             | Both A and B approved. Section considered translated.                            |
+| REV-04 | Reject a translation                | 1. Click Reject on translation A                      | Translation A dimmed, strikethrough, red "Rejected" badge                        |
+| REV-05 | Reject with reason                  | 1. Click Reject 2. Type reason 3. Submit              | Translation.rejectionReason saved. Rejected badge shown.                         |
+| REV-06 | Reject all translations -> re-entry | 1. Reject all N translations                          | Section status -> pending. Re-enters translation pool.                           |
+| REV-07 | Re-entry notification               | 1. All translations rejected                          | Notification sent to translators: "Section on page N needs re-translation"       |
+| REV-08 | Editor override translation         | 1. Type own text 2. Click "Submit as Editor's Choice" | Editor's version saved as Translation, isApproved=true labeled "Editor's Choice" |
+| REV-09 | Copy from submitted translation     | 1. Click "Copy from Kamal" on editor override         | Editor's textarea filled with Kamal's translation text                           |
+| REV-10 | Blocked translator review           | 1. Blocked user's translation visible                 | Translation shown with "Blocked User" label, still approve/rejectable            |
+| REV-11 | Audit trail created                 | 1. Approve + reject some translations                 | TranslationHistoryItem created for each action (APPROVED/REJECTED)               |
+| REV-12 | Review navigation                   | 1. Navigate between sections                          | Keyboard prev/next, section counter "Section 3 of 12"                            |
+
+#### 6d. Build Book (US-5.4)
+
+| TC-ID  | Scenario                                | Steps                                          | Expected Result                                                      |
+| ------ | --------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------- |
+| BLD-01 | Build button enabled                    | 1. Book has approved translations              | Build button active                                                  |
+| BLD-02 | Build button disabled - no sections     | 1. Book with no sections                       | Disabled, tooltip: "No sections detected"                            |
+| BLD-03 | Build button disabled - no approvals    | 1. Sections exist but no approved translations | Disabled, tooltip: "No approved translations"                        |
+| BLD-04 | Build summary panel                     | 1. View build panel                            | Shows total/approved/pending/untranslated counts with warnings       |
+| BLD-05 | Confirmation dialog before build        | 1. Click Build                                 | Dialog shows skipped sections count, Cancel/Build buttons            |
+| BLD-06 | Build progress polling                  | 1. After starting build                        | Frontend polls GET /api/books/{bookId}/builds/latest every 3s        |
+| BLD-07 | Progress bar during build               | 1. Build in progress                           | Shows "Building page X of Y..." with progress fill                   |
+| BLD-08 | Cancel build                            | 1. Click Cancel Build during build             | Celery task revoked, BookBuild status set to CANCELLED               |
+| BLD-09 | Build completes                         | 1. Wait for build                              | BuildProgress -> 100%. Download button appears.                      |
+| BLD-10 | Download PDF                            | 1. Click Download                              | PDF downloaded with filename "{title}-v{version}.pdf"                |
+| BLD-11 | Copy download link                      | 1. Click Copy Link                             | Presigned URL copied to clipboard, toast confirmation                |
+| BLD-12 | Rebuild creates new version             | 1. Build 2. Rebuild                            | Version number increments (v2, v3, ...). Previous builds accessible. |
+| BLD-13 | Version history panel                   | 1. After 3 builds                              | Shows v3, v2, v1 with status badges, dates, download buttons         |
+| BLD-14 | Download older version                  | 1. Click Download on v1                        | v1 PDF downloaded (presigned URL)                                    |
+| BLD-15 | Build failure                           | 1. Mock build failure                          | "Build failed" status, error message, Retry button                   |
+| BLD-16 | Build failure notification              | 1. Editor navigates away during build          | Badge/indicator shows "Build complete" or "Build failed"             |
+| BLD-17 | Build in-progress prevents second build | 1. Click Build while already building          | "Build in progress" button, disabled                                 |
+| BLD-18 | Concurrent builds                       | 1. Start build 2. Try to build again           | 409 Conflict, "Build already in progress"                            |
+
+#### 6e. Error Handling — Epic 5 Edge Cases
+
+| TC-ID     | Scenario                           | Steps                                                      | Expected Result                                                                                 |
+| --------- | ---------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| E5-ERR-01 | Reorder network error              | 1. Reorder pages 2. API fails (timeout/500)                | Toast "Failed to update page order. [Retry]", revert to previous order                          |
+| E5-ERR-02 | Reorder validation error           | 1. Send pageId not belonging to book                       | Toast "Some pages could not be reordered. [Refresh]"                                            |
+| E5-ERR-03 | Delete last page blocked           | 1. Try to delete the only page                             | Delete button disabled, tooltip "A book must have at least one page"                            |
+| E5-ERR-04 | Delete network error               | 1. DELETE API fails                                        | Toast "Failed to delete page. [Retry]", page item re-appears                                    |
+| E5-ERR-05 | Add page network error             | 1. POST API fails                                          | Remove optimistic page item, toast "Failed to add page. [Retry]"                                |
+| E5-ERR-06 | Approve conflict (409)             | 1. Translation already approved/rejected by another editor | Toast "This translation was already {status} by another editor", auto-refresh translations list |
+| E5-ERR-07 | Reject network error               | 1. API request fails                                       | Toast "Failed to reject translation. [Retry]", keep card in Pending state                       |
+| E5-ERR-08 | Editor override API failure        | 1. POST API fails                                          | Toast "Failed to submit editor's translation. [Retry]", keep text for retry                     |
+| E5-ERR-09 | Section image load error in review | 1. Presigned URL expired or S3 down                        | Image shows broken placeholder with "Reference image unavailable" + Retry                       |
+| E5-ERR-10 | Build failure (S3)                 | 1. S3 upload timeout after 3 retries                       | Red error card with error message, [Retry Build] button                                         |
+| E5-ERR-11 | Build failure (PDF generation)     | 1. PDF generation crashes on page N                        | Error card with page number, [Retry Build]                                                      |
+| E5-ERR-12 | Build failure (DB read)            | 1. Cannot read page/section data                           | Error card with DB error details, [Retry Build]                                                 |
+| E5-ERR-13 | Build cancel fails                 | 1. DELETE endpoint fails after timeout                     | Toast "Failed to cancel — build may complete shortly", continue polling                         |
+| E5-ERR-14 | Concurrent build blocked           | 1. Click Build while another is active                     | Button disabled, tooltip "A build is already in progress"                                       |
+| E5-ERR-15 | Download URL expired               | 1. Click download link after >1h                           | Toast "Download link expired — generating new link...", auto-generate new URL                   |
+| E5-ERR-16 | Version download not found         | 1. Version or PDF file missing                             | Toast "Version not found or has no associated PDF file" with [Refresh]                          |
 
 ### 7. Team Management
 
@@ -625,3 +707,55 @@ This test plan covers the core features of the Maha Pothana book translation pla
 - [ ] Extraction audit log available for admin review
 - [ ] AI extraction disabled via config blocks all triggers
 - [ ] OPENAI_API_KEY required in environment
+
+### Book Organization & Publishing (Epic 5)
+
+- [ ] Pages can be reordered via drag-and-drop with visual drop indicator
+- [ ] Reordered page order persists on page reload
+- [ ] Blank pages can be added between pages
+- [ ] Pages can be deleted with cascade of child documents
+- [ ] Delete prevents removal of the last remaining page
+- [ ] Reorder conflict detection shows toast warning on simultaneous edit
+- [ ] Ctrl+Z undoes page reorder actions
+- [ ] Blank pages accept sections in canvas editor
+- [ ] Page history panel shows timeline of section snapshots
+- [ ] Section snapshots can be restored from history
+- [ ] SectionEditHistory entries created on each section save
+- [ ] Page list loads quickly for 500+ page books
+- [ ] Filter by status works correctly (All, Not Started, In Progress, Completed, Needs Review)
+- [ ] Filter state persists in URL and survives reload
+- [ ] Sort by page order and translation percentage works correctly
+- [ ] Filter + sort combination works correctly
+- [ ] Progress bar colors: gray (0%), blue (1-99%), green (100%)
+- [ ] Summary stats bar shows accurate aggregate counts
+- [ ] Empty filter result shows "No pages match filter" with clear CTA
+- [ ] Pre-detection state shows "Process pages first" message
+- [ ] Filter/sort bar is sticky during scroll
+- [ ] Translation review console shows all submitted translations side-by-side
+- [ ] Approve marks translation with green badge, isApproved=true
+- [ ] Multiple translations can be approved
+- [ ] Reject dims card with strikethrough and red badge
+- [ ] Reject with reason saves rejectionReason to Translation
+- [ ] Rejecting all translations causes section to re-enter pool
+- [ ] Re-entry notification sent to translators
+- [ ] Editor override creates auto-approved "Editor's Choice" translation
+- [ ] Copy from submitted translation fills editor textarea
+- [ ] Blocked user translations still visible in review
+- [ ] Audit trail (TranslationHistoryItem) created for each approve/reject action
+- [ ] Review navigation shows section counter and supports keyboard prev/next
+- [ ] Build button enabled only with sections + approved translations
+- [ ] Build summary panel shows accurate counts with warnings
+- [ ] Build confirmation dialog shows skipped sections
+- [ ] Frontend polls build progress every 3 seconds
+- [ ] Progress bar shows "Building page X of Y..."
+- [ ] Cancel build terminates Celery task and sets CANCELLED status
+- [ ] Download button appears on build completion
+- [ ] Download PDF filename matches "{title}-v{version}.pdf"
+- [ ] Copy Link copies presigned URL to clipboard
+- [ ] Rebuild increments version number
+- [ ] Version history panel shows all builds with download
+- [ ] Older versions remain downloadable
+- [ ] Build failure shows error message with Retry
+- [ ] In-progress build prevents triggering a second build
+- [ ] Concurrent build request returns 409 Conflict
+- [ ] Build notifications/indicators shown when editor navigates away

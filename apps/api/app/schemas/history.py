@@ -3,6 +3,7 @@ from datetime import datetime
 
 
 class TranslationHistoryItem(BaseModel):
+    id: str
     translationId: str
     sectionId: str
     pageNumber: int

@@ -17,6 +17,7 @@ class TranslationResponse(BaseModel):
     translatedText: str
     exactLetterTranslation: str | None = None
     isApproved: bool = False
+    rejected: bool = False
     approvedBy: ApprovedByRef | None = None
     createdAt: datetime | None = None
 

@@ -37,9 +37,15 @@ describe("TranslatePage", () => {
     vi.restoreAllMocks()
   })
 
-  it("renders the page title", () => {
+  it("renders the page title", async () => {
     render(React.createElement(TranslatePage))
     expect(screen.getByRole("heading", { name: "Translate" })).toBeInTheDocument()
+
+    // Let the books-fetch effect settle so its setState isn't left dangling
+    // outside act() once the test exits.
+    await waitFor(() => {
+      expect(screen.getByText("The Gita")).toBeInTheDocument()
+    })
   })
 
   it("renders a book card for each available book", async () => {

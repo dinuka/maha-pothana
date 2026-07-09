@@ -81,3 +81,23 @@ class ReverseTransliterateResponse(BaseModel):
     sourceText: str
     confidence: float
     model: str
+
+
+class GenerateAllResponse(BaseModel):
+    sectionId: str
+    status: str
+    taskId: str | None = None
+
+
+class GenerateAllResultResponse(BaseModel):
+    sectionId: str
+    status: str
+    extractionStatus: str | None = None
+    transliterationStatus: str | None = None
+    analysisStatus: str | None = None
+    aiExtractedText: str | None = None
+    transliteratedText: str | None = None
+    wordByWordMeaning: str | None = None
+    fullMeaning: str | None = None
+    simplifiedMeaning: str | None = None
+    error: str | None = None

@@ -3,18 +3,24 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 import random
 from pydantic import BaseModel
+from datetime import datetime, timezone
 
 from app.db.client import get_db
 from app.schemas.section import NextSectionResponse
 from app.schemas.translation import TranslationSubmit, TranslationResponse, MyTranslationResponse
+from app.schemas.book_organization import (
+    ApproveTranslationResponse,
+    RejectTranslationRequest,
+    RejectTranslationResponse,
+    EditorOverrideRequest,
+    EditorOverrideResponse,
+)
 from app.schemas.refs import BookRef, SectionRef, TranslatorRef, ApprovedByRef
 from app.services.s3 import get_presigned_url
 from app.services.translate import auto_translate, analyze_verse
 from app.services.translation_activity import record_translation_activity
 from app.api.deps import get_current_user
 from app.tasks.recompute_book_stats import recompute_book_stats_task
-from datetime import datetime, timezone
-
 
 router = APIRouter()
 
@@ -39,10 +45,16 @@ async def get_next_section(
     language: str | None = Query(None),
     page_num: int | None = Query(None, alias="page"),
     status: str | None = Query(None),
+    section_id: str | None = Query(None),
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    pipeline = [
+    pipeline: list[dict] = []
+
+    if section_id:
+        pipeline.append({"$match": {"_id": ObjectId(section_id)}})
+
+    pipeline.extend([
         {
             "$lookup": {
                 "from": "translations",
@@ -53,15 +65,12 @@ async def get_next_section(
                 "as": "translations",
             }
         },
-    ]
+    ])
 
-    # Apply status filter
     if status == "pending":
         pipeline.append({
             "$match": {
-                "$expr": {
-                    "$lt": [{"$size": "$translations"}, 1]
-                }
+                "$expr": {"$lt": [{"$size": "$translations"}, 1]}
             }
         })
     elif status == "translated":
@@ -88,16 +97,14 @@ async def get_next_section(
             }
         })
     else:
-        # Default: sections with no translations
         pipeline.append({
             "$match": {
-                "$expr": {
-                    "$lt": [{"$size": "$translations"}, 1]
-                }
+                "$expr": {"$lt": [{"$size": "$translations"}, 1]}
             }
         })
 
-    pipeline.append({"$sample": {"size": 1}})
+    if not section_id:
+        pipeline.append({"$sample": {"size": 1}})
 
     pipeline.extend([
         {
@@ -113,11 +120,9 @@ async def get_next_section(
         {"$unwind": "$page"},
     ])
 
-    # Apply book filter
     if bookId:
         pipeline.append({"$match": {"page.book.id": bookId}})
 
-    # Apply page number filter
     if page_num is not None:
         pipeline.append({"$match": {"page.pageNumber": page_num}})
 
@@ -135,7 +140,6 @@ async def get_next_section(
         {"$unwind": "$book"},
     ])
 
-    # Apply language filter
     if language:
         pipeline.append({"$match": {"book.translateLanguages": language}})
 
@@ -177,6 +181,8 @@ async def get_section(section_id: str, db: AsyncIOMotorDatabase = Depends(get_db
     if not sec:
         raise HTTPException(404, "Section not found")
 
+    page = await db.pages.find_one({"_id": ObjectId(sec["page"]["id"])})
+
     cropped_url = None
     if sec.get("croppedImageKey"):
         cropped_url = await get_presigned_url(sec["croppedImageKey"])
@@ -184,6 +190,7 @@ async def get_section(section_id: str, db: AsyncIOMotorDatabase = Depends(get_db
     return {
         "id": str(sec["_id"]),
         "page": {"id": sec["page"]["id"]},
+        "pageNumber": page.get("pageNumber", 0) if page else 0,
         "sectionOrder": sec["sectionOrder"],
         "type": sec.get("type", "PARAGRAPH"),
         "x": sec.get("x", 0),
@@ -191,7 +198,12 @@ async def get_section(section_id: str, db: AsyncIOMotorDatabase = Depends(get_db
         "width": sec.get("width", 100),
         "height": sec.get("height", 50),
         "originalText": sec.get("originalText"),
+        "aiExtractedText": sec.get("aiExtractedText"),
         "exactLetterTranslation": sec.get("exactLetterTranslation"),
+        "autoTranslatedText": sec.get("autoTranslatedText"),
+        "wordByWordMeaning": sec.get("wordByWordMeaning"),
+        "fullMeaning": sec.get("fullMeaning"),
+        "simplifiedMeaning": sec.get("simplifiedMeaning"),
         "croppedImageUrl": cropped_url,
     }
 
@@ -323,6 +335,10 @@ async def submit_translation(
                     "translatedText": body.translatedText,
                     "exactLetterTranslation": body.exactLetterTranslation,
                     "updatedAt": datetime.now(timezone.utc),
+                    "isApproved": False,
+                    "rejected": False,
+                    "rejectedBy": None,
+                    "rejectionReason": None,
                 }
             },
         )
@@ -334,6 +350,9 @@ async def submit_translation(
             "exactLetterTranslation": body.exactLetterTranslation,
             "isApproved": False,
             "approvedBy": None,
+            "rejected": False,
+            "rejectedBy": None,
+            "rejectionReason": None,
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
         })
@@ -341,7 +360,7 @@ async def submit_translation(
 
     await record_translation_activity(
         db,
-        translation_id=translation_id,
+        translation_id=translation_id if not existing else str(existing["_id"]),
         section_id=section_id,
         translator_id=user_id,
         translated_text=body.translatedText,
@@ -390,6 +409,7 @@ async def get_section_translations(section_id: str, db: AsyncIOMotorDatabase = D
                 translatedText=t["translatedText"],
                 exactLetterTranslation=t.get("exactLetterTranslation"),
                 isApproved=t.get("isApproved", False),
+                rejected=t.get("rejected", False),
                 approvedBy=ApprovedByRef(id=t["approvedBy"]["id"]) if t.get("approvedBy") else None,
                 createdAt=t.get("createdAt"),
             )
@@ -397,19 +417,31 @@ async def get_section_translations(section_id: str, db: AsyncIOMotorDatabase = D
     return result
 
 
-@router.post("/api/translations/{translation_id}/approve")
+@router.put("/api/translations/{translation_id}/approve")
 async def approve_translation(
     translation_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
+    """Approve a translation. Can be called on any translation to change status."""
     translation = await db.translations.find_one({"_id": ObjectId(translation_id)})
     if not translation:
         raise HTTPException(404, "Translation not found")
 
+    now = datetime.now(timezone.utc)
     await db.translations.update_one(
         {"_id": ObjectId(translation_id)},
-        {"$set": {"isApproved": True, "approvedBy": {"id": user_id}, "updatedAt": datetime.now(timezone.utc)}},
+        {
+            "$set": {
+                "isApproved": True,
+                "approvedBy": {"id": user_id},
+                "approvedAt": now,
+                "updatedAt": now,
+                "rejected": False,
+                "rejectedBy": None,
+                "rejectionReason": None,
+            }
+        },
     )
 
     await record_translation_activity(
@@ -424,22 +456,48 @@ async def approve_translation(
 
     await _queue_stats_recompute_for_section(db, translation["section"]["id"])
 
-    return {"status": "approved"}
+    return ApproveTranslationResponse(
+        success=True,
+        translation={
+            "id": translation_id,
+            "sectionId": translation["section"]["id"],
+            "translatorId": translation["translator"]["id"],
+            "translatorName": None,
+            "isApproved": True,
+            "approvedBy": user_id,
+            "approvedAt": now.isoformat(),
+            "translatedText": translation["translatedText"],
+        },
+    )
 
 
-@router.post("/api/translations/{translation_id}/reject")
+@router.put("/api/translations/{translation_id}/reject")
 async def reject_translation(
     translation_id: str,
+    body: RejectTranslationRequest | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
+    """Reject a translation. Can be called on any translation to change status.
+    If all translations for the section are rejected, the section re-enters the translation pool."""
     translation = await db.translations.find_one({"_id": ObjectId(translation_id)})
     if not translation:
         raise HTTPException(404, "Translation not found")
 
+    reason = body.reason if body else None
+    now = datetime.now(timezone.utc)
     await db.translations.update_one(
         {"_id": ObjectId(translation_id)},
-        {"$set": {"isApproved": False, "updatedAt": datetime.now(timezone.utc)}},
+        {
+            "$set": {
+                "rejected": True,
+                "rejectedBy": {"id": user_id},
+                "rejectionReason": reason,
+                "rejectedAt": now,
+                "updatedAt": now,
+                "isApproved": False,
+            }
+        },
     )
 
     await record_translation_activity(
@@ -452,6 +510,120 @@ async def reject_translation(
         performed_by=user_id,
     )
 
-    await _queue_stats_recompute_for_section(db, translation["section"]["id"])
+    # Check re-entry logic: if ALL translations for this section are rejected, re-enter pool
+    section_id = translation["section"]["id"]
+    await _check_reentry_logic(db, section_id)
 
-    return {"status": "rejected"}
+    await _queue_stats_recompute_for_section(db, section_id)
+
+    return RejectTranslationResponse(
+        success=True,
+        translation={
+            "id": translation_id,
+            "sectionId": translation["section"]["id"],
+            "rejected": True,
+            "rejectedBy": user_id,
+            "rejectionReason": reason,
+            "rejectedAt": now.isoformat(),
+        },
+    )
+
+
+async def _check_reentry_logic(db: AsyncIOMotorDatabase, section_id: str) -> None:
+    """If all translations for a section are rejected, the section re-enters the pool."""
+    total = await db.translations.count_documents({"section.id": section_id})
+    rejected = await db.translations.count_documents({
+        "section.id": section_id,
+        "rejected": True,
+    })
+    approved = await db.translations.count_documents({
+        "section.id": section_id,
+        "isApproved": True,
+    })
+
+    if total > 0 and total == rejected and approved == 0:
+        # All translations rejected — section re-enters translation pool
+        # This is handled by clearing the rejected flag so sections/next picks it up
+        # or by setting a special flag. We use a "needs_retranslation" flag approach:
+        await db.sections.update_one(
+            {"_id": ObjectId(section_id)},
+            {"$set": {"needsRetranslation": True, "updatedAt": datetime.now(timezone.utc)}}
+        )
+
+
+@router.post("/api/sections/{section_id}/translations")
+async def editor_override_translation(
+    section_id: str,
+    body: EditorOverrideRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    """Editor submits their own translation (auto-approved as Editor's Choice)."""
+    sec = await db.sections.find_one({"_id": ObjectId(section_id)})
+    if not sec:
+        raise HTTPException(404, "Section not found")
+
+    # Get editor info
+    editor = await db.users.find_one({"_id": ObjectId(user_id)})
+    editor_name = editor.get("name", "Unknown Editor") if editor else "Unknown Editor"
+
+    now = datetime.now(timezone.utc)
+
+    existing = await db.translations.find_one({
+        "section.id": section_id,
+        "translator.id": user_id,
+    })
+
+    if existing:
+        translation_id = str(existing["_id"])
+        await db.translations.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {
+                    "translatedText": body.translatedText,
+                    "isApproved": True,
+                    "isEditorOverride": True,
+                    "approvedBy": {"id": user_id},
+                    "approvedAt": now,
+                    "sourceTranslationId": body.sourceTranslationId,
+                    "updatedAt": now,
+                }
+            },
+        )
+    else:
+        result = await db.translations.insert_one({
+            "section": {"id": section_id},
+            "translator": {"id": user_id},
+            "translatedText": body.translatedText,
+            "isApproved": True,
+            "isEditorOverride": True,
+            "approvedBy": {"id": user_id},
+            "approvedAt": now,
+            "sourceTranslationId": body.sourceTranslationId,
+            "createdAt": now,
+            "updatedAt": now,
+        })
+        translation_id = str(result.inserted_id)
+
+    await record_translation_activity(
+        db,
+        translation_id=translation_id,
+        section_id=section_id,
+        translator_id=user_id,
+        translated_text=body.translatedText,
+        action="EDITOR_SUBMIT",
+        performed_by=user_id,
+    )
+
+    await _queue_stats_recompute_for_section(db, section_id)
+
+    return EditorOverrideResponse(
+        id=translation_id,
+        sectionId=section_id,
+        translatorId=user_id,
+        translatorName=editor_name,
+        isApproved=True,
+        isEditorOverride=True,
+        translatedText=body.translatedText,
+        createdAt=now,
+    )

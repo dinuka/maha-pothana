@@ -314,10 +314,7 @@ export const SourceTextPanel = ({
           </button>
         )}
         {isEditor && bookId && pageNumber != null && (
-          <Link
-            href={`/books/${bookId}/pages/${pageNumber}`}
-            style={styles.pageLink}
-          >
+          <Link href={`/books/${bookId}/pages/${pageNumber}`} style={styles.pageLink}>
             Edit original text →
           </Link>
         )}
@@ -373,7 +370,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   toggleBtn: {
     padding: "4px 10px",
-    border: "1px solid var(--border)",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "var(--border)",
     borderRadius: 6,
     background: "var(--background)",
     color: "var(--muted)",

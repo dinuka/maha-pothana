@@ -7,6 +7,7 @@ export interface TranslationFilters {
   language: string | null
   page: number | null
   status: string | null
+  sectionId?: string
 }
 
 export const useTranslationFilters = () => {

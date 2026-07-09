@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
 import type { Role } from "@/lib/auth"
@@ -20,6 +20,8 @@ const languageLabel = (lang: string): string =>
 
 const BookWorkspacePage = () => {
   const { bookId } = useParams<{ bookId: string }>()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: session } = useSession()
   const [book, setBook] = useState<BookDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,6 +38,12 @@ const BookWorkspacePage = () => {
       .finally(() => setLoading(false))
   }, [bookId])
 
+  useEffect(() => {
+    if (searchParams.has("section")) {
+      router.replace(`/translate/${bookId}`, { scroll: false })
+    }
+  }, [bookId, router, searchParams])
+
   const roles = ((session?.user as unknown as { roles: Role[] })?.roles ?? []) as Role[]
   const isEditor = roles.includes("EDITOR")
 
@@ -45,6 +53,7 @@ const BookWorkspacePage = () => {
     language,
     page: null,
     status,
+    sectionId: searchParams.get("section") ?? undefined,
   }
 
   const historyFilters: TranslationFilters = {

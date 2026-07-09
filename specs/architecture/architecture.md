@@ -79,17 +79,31 @@ Dashboard
 BookConsole
 ├── BookSidebar
 │   ├── PageList
-│   │   └── PageItem (status indicator)
-│   └── BookSettings
+│   │   ├── PageItem (draggable, status indicator, progress bar)
+│   │   └── AddPageButton (between pages + at bottom)
+│   ├── BookSettings
+│   └── VersionHistoryPanel (new)
+│       └── VersionItem (download, set as current)
 ├── PageViewer
 │   ├── PageImage (with Konva overlay)
 │   │   ├── SectionRectangles (draggable, resizable)
 │   │   ├── SectionTypeLabels
 │   │   └── AddSectionTool
 │   └── SectionEditor (sidebar)
-└── TranslationPanel
-    ├── TranslationList (for approved)
-    └── SectionTranslations
+├── TranslationReviewPanel (new)
+│   ├── SectionImageDisplay
+│   ├── TranslationCards (side-by-side)
+│   │   ├── TranslationCard (approve, reject, status badge)
+│   │   └── EditorOverride (textarea + save)
+│   └── ReviewActions
+├── TranslationPanel
+│   ├── TranslationList (for approved)
+│   └── SectionTranslations
+└── BuildPanel (new)
+    ├── BuildSummary (section counts, warnings)
+    ├── BuildButton (with progress when active)
+    ├── BuildProgress (progress bar, cancel button)
+    └── DownloadButton (after completion)
 
 TranslatePage
 ├── TranslateHeader (book title, back nav)
@@ -250,6 +264,23 @@ GET    /api/books/{id}/extraction/status  # Batch extraction progress
 GET    /api/admin/settings/extraction  # Fetch AI extraction config (admin only)
 PUT    /api/admin/settings/extraction  # Update AI extraction config (admin only)
 GET    /api/admin/extraction/audit     # Extraction audit log (admin only)
+
+# --- Epic 5: Book Organization & Publishing ---
+
+PUT    /api/books/{bookId}/pages/reorder          # Batch reorder pages
+POST   /api/books/{bookId}/pages                  # Add blank page
+DELETE /api/pages/{pageId}                        # Delete page and cascade
+GET    /api/books/{bookId}/pages?filter={status}&sort={field}&order={asc|desc}&page={n}&limit={20}  # Filter/sort pages
+GET    /api/pages/{pageId}/history                # Section edit history
+PUT    /api/translations/{translationId}/approve   # Approve translation
+PUT    /api/translations/{translationId}/reject    # Reject translation (body: {reason?: string})
+POST   /api/sections/{sectionId}/translations      # Editor override translation
+GET    /api/books/{bookId}/builds/latest            # Poll latest build progress
+DELETE /api/books/{bookId}/builds/latest            # Cancel current build
+GET    /api/books/{bookId}/builds                   # List all builds
+GET    /api/books/{bookId}/versions                  # List all versions
+POST   /api/books/{bookId}/versions                 # Create manual version
+GET    /api/books/{bookId}/versions/{versionNumber}/download  # Download version PDF
 ```
 
 ### Celery Task Queue
@@ -330,13 +361,43 @@ services:
 5. Per-language and per-page breakdowns rendered in charts
 6. Per-translator stats via GET /api/books/{bookId}/translators/stats (separate cache key)
 
-### Data Flow: Book Build
+### Data Flow: Page Reorder
 
-1. Editor clicks "Build" → POST /api/books/{id}/build
-2. FastAPI enqueues `build_book` Celery task
-3. Worker iterates pages in order (using `originalPageNumber` for display labels), lays out approved translations, renders PDF
-4. Final PDF uploaded to MinIO
-5. Book status updated to COMPLETED
+1. Editor drags page in sidebar
+2. Drop triggers PUT /api/books/{bookId}/pages/reorder with `{ orders: [{pageId, order}] }`
+3. Backend validates all pageIds belong to this book
+4. Backend uses bulkWrite to update all page documents atomically
+5. Frontend optimistically updates UI, invalidates page list query on success
+6. On conflict (simultaneous edit by another editor): toast warning, refresh
+
+### Data Flow: Translation Review
+
+1. Editor opens review console for a section
+2. Frontend calls GET /api/sections/{sectionId}/translations
+3. Backend queries Translation collection where sectionId matches
+4. Returns array sorted by createdAt, each with translator info
+5. Editor approves → PUT /api/translations/{id}/approve
+6. Editor rejects → PUT /api/translations/{id}/reject (with optional reason)
+7. Editor submits own → POST /api/sections/{sectionId}/translations
+8. If all translations rejected → section transitions to "pending" → re-enters translation pool
+9. Audit log entries created for each action
+
+### Data Flow: Book Build with Versioning
+
+1. Editor clicks Build → POST /api/books/{bookId}/build
+2. Backend validates pre-conditions, creates BookBuild(status=BUILDING) + BookVersion(status=DRAFT)
+3. Celery build_book task:
+   a. Fetch pages ordered by `order`
+   b. Per page: fetch sections ordered by `sectionOrder`
+   c. Per section: get most recently approved translation (or original text fallback)
+   d. Render page image with overlaid translated text in section bounding boxes
+   e. Compile into PDF
+   f. Upload to S3: books/{bookId}/versions/{versionNumber}/finalized.pdf
+   g. Update BookBuild: status=COMPLETED, fileKey, versionNumber, buildDurationMs
+   h. Update BookVersion: status=FINALIZED
+4. Frontend polls GET /api/books/{bookId}/builds/latest every 3s
+5. On completion, Download button appears with presigned URL
+6. Each rebuild increments versionNumber; previous builds remain accessible
 
 ### Data Flow: AI Text Extraction
 
@@ -381,16 +442,19 @@ services:
 
 ## MongoDB Schema Notes
 
+- **BookVersion** — Stores version history snapshots for the book. Each BookBuild automatically creates a BookVersion record; editors can also manually create versions with custom labels (e.g., "Draft for proofreading v2"). Fields: `bookId` (ref Book), `versionNumber` (int, sequential), `buildId` (ref BookBuild, nullable for manual), `label` (string), `changelog` (string), `fileKey` (string, S3 key for PDF), `createdBy` (ref User), `status` (DRAFT, FINALIZED, ARCHIVED), `createdAt`, `updatedAt`.
 - **Motor** (async MongoDB driver) used with FastAPI
 - **Document embedding** considered for comments (embedded array in Section) vs. separate collection; separate collection chosen for scalability with high comment volumes
 - **Indexes** created on startup via `db/indexes.py`:
   - `users`: `{ googleId: 1 }` unique, `{ email: 1 }` unique
   - `books`: `{ ownerId: 1 }`, `{ fileHash: 1 }`, text index on title/author
-  - `pages`: `{ bookId: 1, pageNumber: 1 }`
+  - `pages`: `{ bookId: 1, pageNumber: 1 }`, `{ bookId: 1, order: 1 }`
   - `sections`: `{ pageId: 1, sectionOrder: 1 }`
-  - `translations`: `{ sectionId: 1, translatorId: 1 }` unique, `{ sectionId: 1, isApproved: 1 }`, `{ createdAt: -1 }`, `{ translatorId: 1, createdAt: -1 }` (for history queries)
+  - `translations`: `{ sectionId: 1, translatorId: 1 }` unique, `{ sectionId: 1, isApproved: 1 }`, `{ sectionId: 1, rejected: 1 }`, `{ createdAt: -1 }`, `{ translatorId: 1, createdAt: -1 }` (for history queries)
   - `comments`: `{ sectionId: 1, createdAt: 1 }`
   - `invitations`: `{ bookId: 1, userId: 1 }` unique
+  - `book_builds`: `{ bookId: 1, versionNumber: -1 }`
+  - `book_versions`: `{ bookId: 1, versionNumber: -1 }`
   - `translation_drafts`: `{ sectionId: 1, translatorId: 1 }` unique, TTL index on `createdAt` (24h expiry)
   - `ai_text_extractions`: `{ sectionId: 1 }` unique (AI extraction results)
   - `transliterations`: `{ translationId: 1 }` unique (AI transliteration cache)

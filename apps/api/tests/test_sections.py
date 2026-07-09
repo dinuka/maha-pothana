@@ -144,6 +144,7 @@ async def test_get_section_translations(client, mock_db, sample_section, sample_
 async def test_approve_translation(
     client, mock_db, sample_translation, sample_section, sample_page, sample_user
 ):
+    # find_one must return a translation that is not yet approved/rejected
     mock_db.translations.find_one = AsyncMock(return_value=sample_translation)
     mock_db.translations.update_one = AsyncMock()
     mock_db.sections.find_one = AsyncMock(return_value=sample_section)
@@ -151,21 +152,22 @@ async def test_approve_translation(
     mock_db.users.find_one = AsyncMock(return_value=sample_user)
     mock_db.translation_activity.insert_one = AsyncMock()
 
-    response = await client.post(
+    # The approve endpoint uses PUT, not POST
+    response = await client.put(
         f'/api/translations/{sample_translation["_id"]}/approve',
         headers={"Authorization": "Bearer test-token"},
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "approved"
+    assert response.json()["success"] is True
     mock_db.translation_activity.insert_one.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_approve_translation_not_found(client, mock_db):
-    mock_db.translations.find_one = AsyncMock(return_value=None)
+    mock_db.translations.find_one = AsyncMock(side_effect=[None, None])
 
-    response = await client.post(
+    response = await client.put(
         f'/api/translations/507f1f77bcf86cd799439999/approve',
         headers={"Authorization": "Bearer test-token"},
     )
@@ -183,12 +185,14 @@ async def test_reject_translation(
     mock_db.pages.find_one = AsyncMock(return_value=sample_page)
     mock_db.users.find_one = AsyncMock(return_value=sample_user)
     mock_db.translation_activity.insert_one = AsyncMock()
+    mock_db.translations.count_documents = AsyncMock(return_value=0)
 
-    response = await client.post(
+    response = await client.put(
         f'/api/translations/{sample_translation["_id"]}/reject',
+        json={"reason": "Does not match source text"},
         headers={"Authorization": "Bearer test-token"},
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "rejected"
+    assert response.json()["success"] is True
     mock_db.translation_activity.insert_one.assert_awaited_once()

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.config import settings
+from app.services.ai_text import strip_reasoning
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ async def auto_translate(text: str, source_lang: str = "auto", target_lang: str 
             ],
             "max_tokens": 2048,
             "temperature": 0.0,
+            "reasoning": {"exclude": True},
         }
 
         try:
@@ -85,7 +87,7 @@ async def auto_translate(text: str, source_lang: str = "auto", target_lang: str 
                     last_error = "Empty response from AI"
                     continue
 
-            translated = data["choices"][0]["message"]["content"].strip()
+            translated = strip_reasoning(data["choices"][0]["message"]["content"])
             logger.info("[translate] auto_translate: model=%s result_len=%d", model, len(translated))
             return translated
 
@@ -143,6 +145,7 @@ async def analyze_verse(text: str, target_lang: str = "si") -> VerseAnalysis | N
             "max_tokens": 8192,
             "temperature": 0.0,
             "response_format": {"type": "json_object"},
+            "reasoning": {"exclude": True},
         }
 
         try:
@@ -183,7 +186,7 @@ async def analyze_verse(text: str, target_lang: str = "si") -> VerseAnalysis | N
                     last_error = "Empty response from AI"
                     continue
 
-            content = data["choices"][0]["message"]["content"].strip()
+            content = strip_reasoning(data["choices"][0]["message"]["content"])
 
             try:
                 parsed = json.loads(content)

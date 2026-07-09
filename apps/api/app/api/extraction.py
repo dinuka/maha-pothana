@@ -19,6 +19,8 @@ from app.schemas.extraction import (
     SourceTextUpdate,
     ReverseTransliterateRequest,
     ReverseTransliterateResponse,
+    GenerateAllResponse,
+    GenerateAllResultResponse,
 )
 from app.services.ai_text import estimate_extraction_cost
 
@@ -425,3 +427,75 @@ async def reverse_transliterate(
     except Exception as e:
         logger.error("reverse_transliterate failed for %s: %s", section_id, e)
         raise HTTPException(500, f"Reverse transliteration failed: {e}")
+
+
+@router.post("/sections/{section_id}/generate-all", status_code=202)
+async def trigger_generate_all(
+    section_id: str,
+    target_script: str = Query("sinhala", min_length=1),
+    force: bool = Query(False),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    logger.info("POST /sections/%s/generate-all - triggered by user %s (force=%s)", section_id, user_id, force)
+
+    sec = await db.sections.find_one({"_id": ObjectId(section_id)})
+    if not sec:
+        raise HTTPException(404, "Section not found")
+
+    has_source_text = bool(sec.get("aiExtractedText") or sec.get("originalText"))
+    if not has_source_text and not sec.get("croppedImageKey"):
+        raise HTTPException(422, "Section has no cropped image. Crop sections first.")
+
+    existing = await db.generation_runs.find_one({"sectionId": section_id})
+    if not force and existing and existing.get("status") == "completed":
+        return JSONResponse(
+            status_code=409,
+            content={"sectionId": section_id, "status": "completed"},
+        )
+
+    await db.generation_runs.update_one(
+        {"sectionId": section_id},
+        {"$set": {
+            "sectionId": section_id,
+            "status": "queued",
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        }},
+        upsert=True,
+    )
+
+    from app.tasks.generate_section_all import generate_section_all
+
+    task = generate_section_all.delay(section_id, target_script, force)
+    logger.info("POST /sections/%s/generate-all - task dispatched, task_id=%s", section_id, task.id)
+
+    return GenerateAllResponse(
+        sectionId=section_id,
+        status="queued",
+        taskId=task.id,
+    )
+
+
+@router.get("/sections/{section_id}/generate-all")
+async def get_generate_all(
+    section_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    run = await db.generation_runs.find_one({"sectionId": section_id})
+    if not run:
+        raise HTTPException(404, "No generation run found for this section")
+
+    return GenerateAllResultResponse(
+        sectionId=section_id,
+        status=run.get("status", "queued"),
+        extractionStatus=run.get("extractionStatus"),
+        transliterationStatus=run.get("transliterationStatus"),
+        analysisStatus=run.get("analysisStatus"),
+        aiExtractedText=run.get("aiExtractedText"),
+        transliteratedText=run.get("transliteratedText"),
+        wordByWordMeaning=run.get("wordByWordMeaning"),
+        fullMeaning=run.get("fullMeaning"),
+        simplifiedMeaning=run.get("simplifiedMeaning"),
+        error=run.get("error"),
+    )
