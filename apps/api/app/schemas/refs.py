@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class BookRef(BaseModel):
     id: str
+    sourceLanguage: str | None = None
 
 
 class PageRef(BaseModel):

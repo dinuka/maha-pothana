@@ -33,3 +33,9 @@ class PageListResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class PageImageResponse(BaseModel):
+    pageNumber: int
+    imageUrl: str | None = None
+    totalPages: int

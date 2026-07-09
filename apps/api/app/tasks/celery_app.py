@@ -10,6 +10,9 @@ celery_app = Celery(
         "app.tasks.detect_sections",
         "app.tasks.crop_sections",
         "app.tasks.build_book",
+        "app.tasks.extract_section_text",
+        "app.tasks.transliterate_section",
+        "app.tasks.recompute_book_stats",
     ],
 )
 

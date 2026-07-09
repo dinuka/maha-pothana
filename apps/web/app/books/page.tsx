@@ -1,5 +1,7 @@
 import { apiFetch } from "@/lib/apiClient"
 import Link from "next/link"
+import { SectionProgressBar } from "@/components/SectionProgressBar"
+import type { BookStatsSummary } from "@/lib/api/books"
 
 interface Book {
   id: string
@@ -8,6 +10,7 @@ interface Book {
   language: string
   status: string
   thumbnailKey?: string
+  stats: BookStatsSummary
 }
 
 async function getBooks(): Promise<Book[]> {
@@ -55,6 +58,16 @@ export default async function BooksPage() {
                 <h3 style={styles.bookTitle}>{book.title}</h3>
                 <p style={styles.bookAuthor}>{book.author}</p>
                 <span style={styles.badge}>{book.status}</span>
+                <div style={styles.progress}>
+                  <SectionProgressBar
+                    approved={book.stats.translatedSections}
+                    inProgress={book.stats.inProgressSections}
+                    pending={book.stats.pendingSections}
+                    total={book.stats.totalSections}
+                    size="sm"
+                    showLabel
+                  />
+                </div>
               </div>
             </Link>
           ))}
@@ -124,4 +137,5 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid var(--border)",
     textTransform: "capitalize",
   },
+  progress: { marginTop: 12 },
 }

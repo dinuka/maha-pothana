@@ -8,6 +8,10 @@ from app.config import settings
 from app.db.client import connect_db, close_db, get_db
 from app.db.indexes import ensure_indexes
 from app.api import auth, books, pages, sections, users
+from app.api.books_stats import router as books_stats_router
+from app.api.translations_history import router as translations_history_router
+from app.api.translations_draft import router as translations_draft_router
+from app.api.extraction import router as extraction_router
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -65,6 +69,10 @@ app.include_router(books.router)
 app.include_router(pages.router)
 app.include_router(sections.router)
 app.include_router(users.router)
+app.include_router(books_stats_router)
+app.include_router(translations_history_router)
+app.include_router(translations_draft_router)
+app.include_router(extraction_router)
 
 
 @app.get("/api/health")

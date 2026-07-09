@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Lock } from "lucide-react"
 import { publicEnv } from "@/lib/env/publicEnv"
@@ -38,6 +38,7 @@ export default function PageEditorWrapper({
   const [sections, setSections] = useState<Section[]>(initialSections)
   const [isFinalizing, setIsFinalizing] = useState(false)
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
+  const pollingActiveRef = useRef(true)
 
   const canFinalize =
     pageStatus === PageStatus.SECTIONS_CONFIRMED ||
@@ -68,8 +69,11 @@ export default function PageEditorWrapper({
     })
     if (!res.ok) return
 
+    pollingActiveRef.current = true
     for (let attempt = 0; attempt < 30; attempt++) {
+      if (!pollingActiveRef.current) return
       await new Promise((r) => setTimeout(r, 1000))
+      if (!pollingActiveRef.current) return
       try {
         const pageRes = await fetch(`${publicEnv.apiUrl}/api/books/${bookId}/pages/${pageNum}`)
         if (!pageRes.ok) continue
@@ -85,6 +89,12 @@ export default function PageEditorWrapper({
       }
     }
   }, [pageId, bookId, pageNum, router])
+
+  useEffect(() => {
+    return () => {
+      pollingActiveRef.current = false
+    }
+  }, [])
 
   return (
     <>

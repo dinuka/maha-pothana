@@ -7,6 +7,7 @@
 | **Super Admin** | Full system access. Can modify any user's roles and permissions.                                       |
 | **Editor**      | Can add books, manage pages/sections, assign translators, approve translations, build finalized books. |
 | **Translator**  | Can view assigned sections, provide translations, add comments.                                        |
+| **AI Agent**    | System-initiated role. Runs background tasks: text extraction, transliteration, auto-translation.      |
 
 ## Permissions Matrix
 
@@ -34,6 +35,13 @@
 | Invite users to book                  |     ✅      |   ✅   |     ❌     |
 | Block translators from book           |     ✅      |   ✅   |     ❌     |
 | Add translator comments               |     ✅      |   ✅   |     ✅     |
+| View translation history              |     ✅      |   ✅   |     ✅     |
+| View translation statistics           |     ✅      |   ✅   |     ❌     |
+| View translator performance stats     |     ✅      |   ✅   |     ❌     |
+| Filter translations by language/page  |     ✅      |   ✅   |     ✅     |
+| Trigger AI text extraction            |     ✅      |   ✅   |     ❌     |
+| View AI extraction confidence score   |     ✅      |   ✅   |     ✅     |
+| Regenerate AI transliteration         |     ✅      |   ✅   |     ❌     |
 
 ## Notes
 

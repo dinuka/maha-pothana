@@ -4,12 +4,13 @@ from bson import ObjectId
 
 from app.db.client import get_db
 from app.models.page_status import PageStatus, parse_page_status, with_translation_progress
-from app.schemas.page import PageResponse, PageListItem, PageListResponse
+from app.schemas.page import PageResponse, PageListItem, PageListResponse, PageImageResponse
 from app.schemas.refs import BookRef
 from app.services.page_progress import count_section_translation_progress
 from app.services.s3 import get_presigned_url
 from app.tasks.detect_sections import detect_sections
 from app.tasks.crop_sections import crop_sections
+from app.tasks.recompute_book_stats import recompute_book_stats_task
 from app.api.deps import get_current_user
 
 router = APIRouter()
@@ -109,6 +110,26 @@ async def get_page(book_id: str, page_num: int, db: AsyncIOMotorDatabase = Depen
     }
 
 
+@router.get("/api/books/{book_id}/pages/{page_num}/image")
+async def get_page_image(
+    book_id: str, page_num: int, db: AsyncIOMotorDatabase = Depends(get_db)
+) -> PageImageResponse:
+    page = await db.pages.find_one({"book.id": book_id, "pageNumber": page_num})
+    if not page:
+        raise HTTPException(404, "Page not found")
+
+    total_pages = await db.pages.count_documents({"book.id": book_id})
+
+    image_key = page.get("imageKey")
+    image_url = await get_presigned_url(image_key) if image_key else None
+
+    return PageImageResponse(
+        pageNumber=page["pageNumber"],
+        imageUrl=image_url,
+        totalPages=total_pages,
+    )
+
+
 @router.post("/api/pages/{page_id}/sections/detect")
 async def trigger_detection(page_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     page = await db.pages.find_one({"_id": ObjectId(page_id)})
@@ -147,6 +168,9 @@ async def save_sections(page_id: str, body: list[dict], db: AsyncIOMotorDatabase
 
     crop_sections.delay(page_id)
 
+    if page.get("book"):
+        recompute_book_stats_task.delay(page["book"]["id"])
+
     return {"status": PageStatus.SECTIONS_CONFIRMED}
 
 
@@ -157,7 +181,7 @@ async def finalize_page(page_id: str, db: AsyncIOMotorDatabase = Depends(get_db)
         raise HTTPException(404, "Page not found")
 
     stored_status = parse_page_status(page.get("status"))
-    if stored_status not in (PageStatus.SECTIONS_CONFIRMED, PageStatus.FINALIZED):
+    if stored_status != PageStatus.SECTIONS_CONFIRMED:
         raise HTTPException(400, "Page sections must be confirmed before finalizing")
 
     section_count, _, approved_count = (

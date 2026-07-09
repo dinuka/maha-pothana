@@ -16,7 +16,10 @@ class SectionResponse(BaseModel):
     width: float = 100
     height: float = 50
     originalText: str | None = None
+    aiExtractedText: str | None = None
+    exactLetterTranslation: str | None = None
     croppedImageKey: str | None = None
+    extractionStatus: str | None = None
     createdAt: datetime | None = None
 
 
@@ -38,7 +41,12 @@ class NextSectionResponse(BaseModel):
     id: str
     type: str
     originalText: str | None = None
+    aiExtractedText: str | None = None
+    exactLetterTranslation: str | None = None
     autoTranslatedText: str | None = None
+    wordByWordMeaning: str | None = None
+    fullMeaning: str | None = None
+    simplifiedMeaning: str | None = None
     pageNumber: int
     bookTitle: str
     book: BookRef

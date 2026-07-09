@@ -10,6 +10,7 @@ from app.models.page_status import PageStatus
 from app.services.book_profile import build_recurring_element_profile
 from app.services.s3 import get_s3
 from app.services.detection import detect_page_sections
+from app.tasks.recompute_book_stats import recompute_book_stats_task
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,9 @@ async def _detect_sections(page_id: str):
             {"_id": ObjectId(page_id)},
             {"$set": {"status": PageStatus.PENDING}},
         )
+
+        if book_id:
+            recompute_book_stats_task.delay(book_id)
 
         return {"page_id": page_id, "sections": len(sections_data)}
 

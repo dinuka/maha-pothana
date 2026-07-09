@@ -7,8 +7,9 @@ import logging
 
 from app.db.client import get_db
 from app.models.page_status import PageStatus
-from app.schemas.book import BookResponse, BookUpdate, BookListItem
+from app.schemas.book import BookResponse, BookUpdate, BookListItem, BookStatsSummary
 from app.schemas.refs import OwnerRef
+from app.services.book_stats import get_books_stats_summary_doc
 from app.services.s3 import upload_file
 from app.tasks.split_pages import split_pages
 from app.api.deps import get_current_user
@@ -25,12 +26,15 @@ async def list_books(
 ):
     cursor = db.books.find({"owner.id": user_id}).sort("createdAt", -1)
     books = await cursor.to_list(length=100)
+    book_ids = [str(book["_id"]) for book in books]
+    stats_by_book = await get_books_stats_summary_doc(db, book_ids)
     result = []
     for book in books:
-        page_count = await db.pages.count_documents({"book.id": str(book["_id"])})
+        book_id = str(book["_id"])
+        page_count = await db.pages.count_documents({"book.id": book_id})
         result.append(
             BookListItem(
-                id=str(book["_id"]),
+                id=book_id,
                 title=book["title"],
                 author=book["author"],
                 sourceLanguage=book["sourceLanguage"],
@@ -38,6 +42,36 @@ async def list_books(
                 status=book.get("status", "UPLOADING"),
                 thumbnailKey=book.get("thumbnailKey"),
                 pageCount=page_count,
+                stats=stats_by_book.get(book_id, BookStatsSummary()),
+            )
+        )
+    return result
+
+
+@router.get("/api/books/available")
+async def list_available_books(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    cursor = db.books.find({"status": "READY"}).sort("createdAt", -1)
+    books = await cursor.to_list(length=100)
+    book_ids = [str(book["_id"]) for book in books]
+    stats_by_book = await get_books_stats_summary_doc(db, book_ids)
+    result = []
+    for book in books:
+        book_id = str(book["_id"])
+        page_count = await db.pages.count_documents({"book.id": book_id})
+        result.append(
+            BookListItem(
+                id=book_id,
+                title=book["title"],
+                author=book["author"],
+                sourceLanguage=book["sourceLanguage"],
+                translateLanguages=book.get("translateLanguages", []),
+                status=book.get("status", "UPLOADING"),
+                thumbnailKey=book.get("thumbnailKey"),
+                pageCount=page_count,
+                stats=stats_by_book.get(book_id, BookStatsSummary()),
             )
         )
     return result

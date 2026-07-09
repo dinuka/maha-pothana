@@ -17,6 +17,50 @@ async def test_list_books(client, mock_db, sample_book):
     assert len(data) == 1
     assert data[0]["title"] == "Test Book"
     assert data[0]["pageCount"] == 5
+    assert data[0]["stats"] == {
+        "totalSections": 0,
+        "translatedSections": 0,
+        "inProgressSections": 0,
+        "pendingSections": 0,
+        "translationPercent": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_books_includes_batched_stats(client, mock_db, sample_book):
+    book_id = str(sample_book["_id"])
+    mock_db.books.find.return_value.to_list = AsyncMock(return_value=[sample_book])
+    mock_db.pages.count_documents = AsyncMock(return_value=5)
+    mock_db.book_stats.find.return_value.to_list = AsyncMock(return_value=[
+        {
+            "bookId": book_id,
+            "stats": {
+                "totalSections": 10,
+                "translatedSections": 4,
+                "inProgressSections": 3,
+                "pendingSections": 3,
+                "translationPercent": 40.0,
+                "byLanguage": {},
+                "byPage": [],
+            },
+            "translatorStats": [],
+        }
+    ])
+
+    response = await client.get("/api/books", headers={
+        "Authorization": "Bearer test-token",
+    })
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["stats"] == {
+        "totalSections": 10,
+        "translatedSections": 4,
+        "inProgressSections": 3,
+        "pendingSections": 3,
+        "translationPercent": 40.0,
+    }
+    mock_db.book_stats.find.assert_called_once()
 
 
 @pytest.mark.asyncio
