@@ -1,6 +1,7 @@
 import { apiFetchBrowser } from "@/lib/apiClientBrowser"
 
 export interface TranslationHistoryItem {
+  id: string
   translationId: string
   sectionId: string
   pageNumber: number

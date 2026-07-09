@@ -23,6 +23,17 @@ COST_PER_TRANSLITERATION = 0.001
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
+def strip_reasoning(text: str) -> str:
+    """Some reasoning-tuned models emit their chain-of-thought directly in the
+    message content (e.g. wrapped in <think>...</think>) instead of a separate
+    reasoning field. Strip that out so only the final answer is used."""
+    import re
+
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"<thinking>.*?</thinking>", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    return cleaned.strip()
+
+
 @dataclass
 class AITextResult:
     text: str
@@ -109,6 +120,7 @@ async def extract_text(image_data: bytes, db=None) -> AITextResult:
                 }
             ],
             "max_tokens": 1024,
+            "reasoning": {"exclude": True},
         }
 
         try:
@@ -143,7 +155,7 @@ async def extract_text(image_data: bytes, db=None) -> AITextResult:
                     continue
 
             elapsed_ms = int((time.monotonic() - start) * 1000)
-            extracted_text = data["choices"][0]["message"]["content"].strip()
+            extracted_text = strip_reasoning(data["choices"][0]["message"]["content"])
             logger.info("[ai_text] extract_text: model=%s extracted %d chars in %dms", model, len(extracted_text), elapsed_ms)
 
             if extracted_text == "[NO_TEXT]":
@@ -190,6 +202,7 @@ async def _score_confidence(extracted_text: str, model: str, api_key: str) -> fl
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 10,
         "temperature": 0.0,
+        "reasoning": {"exclude": True},
     }
 
     try:
@@ -211,7 +224,7 @@ async def _score_confidence(extracted_text: str, model: str, api_key: str) -> fl
             logger.warning("[ai_text] _score_confidence: no choices in response")
             return 0.5
 
-        score_text = data["choices"][0]["message"]["content"].strip()
+        score_text = strip_reasoning(data["choices"][0]["message"]["content"])
         score = max(0.0, min(1.0, float(score_text)))
         logger.info("[ai_text] _score_confidence: score=%s", score)
         return score
@@ -289,6 +302,7 @@ async def transliterate_text(
             ],
             "max_tokens": 1024,
             "temperature": 0.0,
+            "reasoning": {"exclude": True},
         }
 
         try:
@@ -331,7 +345,7 @@ async def transliterate_text(
                     last_error = "Empty response from AI"
                     continue
 
-            transliterated = data["choices"][0]["message"]["content"].strip()
+            transliterated = strip_reasoning(data["choices"][0]["message"]["content"])
             logger.info("[ai_text] transliterate_text: model=%s result_len=%d", model, len(transliterated))
 
             return TransliterationResult(
@@ -425,6 +439,7 @@ async def reverse_transliterate_text(
             ],
             "max_tokens": 1024,
             "temperature": 0.0,
+            "reasoning": {"exclude": True},
         }
 
         try:
@@ -467,7 +482,7 @@ async def reverse_transliterate_text(
                     last_error = "Empty response from AI"
                     continue
 
-            original_text = data["choices"][0]["message"]["content"].strip()
+            original_text = strip_reasoning(data["choices"][0]["message"]["content"])
             logger.info("[ai_text] reverse_transliterate_text: model=%s result_len=%d", model, len(original_text))
 
             return TransliterationResult(

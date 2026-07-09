@@ -55,6 +55,7 @@ async def get_translation_history(
 
     result_items = [
         TranslationHistoryItem(
+            id=str(item["_id"]),
             translationId=item["translationId"],
             sectionId=item["sectionId"],
             pageNumber=item["pageNumber"],

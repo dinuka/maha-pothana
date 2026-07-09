@@ -53,21 +53,22 @@ Index: `{ bookId: 1, userId: 1 }` unique
 
 ### Page
 
-| Field              | Type      | Notes                                                     |
-| ------------------ | --------- | --------------------------------------------------------- |
-| \_id               | ObjectId  | PK                                                        |
-| bookId             | ObjectId  | Ref → Book                                                |
-| pageNumber         | int       | Sequential (1..N)                                         |
-| originalPageNumber | string    | Original page label (e.g. "i", "(II)", "1", "1b")         |
-| imageKey           | string    | S3 key for page image                                     |
-| thumbnailKey       | string    | S3 key for page thumbnail (generated during split)        |
-| width              | int       | Image width in px                                         |
-| height             | int       | Image height in px                                        |
-| status             | string    | PENDING, PROCESSING, SECTIONS_CONFIRMED, DETECTION_FAILED |
-| createdAt          | timestamp |                                                           |
-| updatedAt          | timestamp |                                                           |
+| Field              | Type      | Notes                                                                                                                                               |
+| ------------------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| \_id               | ObjectId  | PK                                                                                                                                                  |
+| bookId             | ObjectId  | Ref → Book                                                                                                                                          |
+| pageNumber         | int       | Original sequential number from PDF (1..N, immutable after creation)                                                                                |
+| **order**          | **int**   | **Display order (1..N). Independent of pageNumber; enables drag-to-reorder without losing original numbering. Defaults to pageNumber on creation.** |
+| originalPageNumber | string    | Original page label from PDF (e.g. "i", "(II)", "1", "1b")                                                                                          |
+| imageKey           | string    | S3 key for page image                                                                                                                               |
+| thumbnailKey       | string    | S3 key for page thumbnail (generated during split)                                                                                                  |
+| width              | int       | Image width in px                                                                                                                                   |
+| height             | int       | Image height in px                                                                                                                                  |
+| status             | string    | PENDING, PROCESSING, SECTIONS_CONFIRMED, DETECTION_FAILED                                                                                           |
+| createdAt          | timestamp |                                                                                                                                                     |
+| updatedAt          | timestamp |                                                                                                                                                     |
 
-Index: `{ bookId: 1, pageNumber: 1 }`
+Index: `{ bookId: 1, order: 1 }`, `{ bookId: 1, pageNumber: 1 }`
 
 **API Response Transient Fields** (computed on read, not stored in DB):
 
@@ -119,18 +120,21 @@ Index: `{ pageId: 1, timestamp: -1 }`
 
 ### Translation
 
-| Field                  | Type      | Notes                                                                            |
-| ---------------------- | --------- | -------------------------------------------------------------------------------- |
-| \_id                   | ObjectId  | PK                                                                               |
-| sectionId              | ObjectId  | Ref → Section                                                                    |
-| translatorId           | ObjectId  | Ref → User                                                                       |
-| translatedText         | string    | The translated text in the target language                                       |
-| exactLetterTranslation | string?   | Letter-for-letter transliteration (AI-generated or manual, e.g. "माता" → "මාතා") |
-| transliterationSource  | string?   | Source of transliteration: "ai" or "manual"                                      |
-| isApproved             | boolean   |                                                                                  |
-| approvedBy             | ObjectId? | Ref → User (editor who approved)                                                 |
-| createdAt              | timestamp |                                                                                  |
-| updatedAt              | timestamp |                                                                                  |
+| Field                  | Type          | Notes                                                                            |
+| ---------------------- | ------------- | -------------------------------------------------------------------------------- |
+| \_id                   | ObjectId      | PK                                                                               |
+| sectionId              | ObjectId      | Ref → Section                                                                    |
+| translatorId           | ObjectId      | Ref → User                                                                       |
+| translatedText         | string        | The translated text in the target language                                       |
+| exactLetterTranslation | string?       | Letter-for-letter transliteration (AI-generated or manual, e.g. "माता" → "මාතා") |
+| transliterationSource  | string?       | Source of transliteration: "ai" or "manual"                                      |
+| isApproved             | boolean       |                                                                                  |
+| approvedBy             | ObjectId?     | Ref → User (editor who approved)                                                 |
+| **rejected**           | **boolean?**  | **Flag indicating this translation was explicitly rejected**                     |
+| **rejectedBy**         | **ObjectId?** | **Ref → User (editor who rejected)**                                             |
+| **rejectionReason**    | **string?**   | **Optional reason provided by editor when rejecting**                            |
+| createdAt              | timestamp     |                                                                                  |
+| updatedAt              | timestamp     |                                                                                  |
 
 Indexes: `{ sectionId: 1, translatorId: 1 }` unique, `{ sectionId: 1, isApproved: 1 }`
 
@@ -181,6 +185,45 @@ Index: `{ translationId: 1 }` unique
 | createdAt | timestamp |                                         |
 
 Index: `{ sectionId: 1, createdAt: 1 }`
+
+### BookBuild
+
+| Field                | Type         | Notes                                                    |
+| -------------------- | ------------ | -------------------------------------------------------- |
+| \_id                 | ObjectId     | PK                                                       |
+| bookId               | ObjectId     | Ref → Book                                               |
+| fileKey              | string       | S3 key for finalized PDF                                 |
+| status               | string       | BUILDING, COMPLETED, FAILED                              |
+| **versionNumber**    | **int**      | **Sequential version number auto-incremented per build** |
+| **errorMessage**     | **string?**  | **Error details if build FAILED**                        |
+| **buildDurationMs**  | **int?**     | **Total build time in milliseconds on completion**       |
+| **totalSections**    | **int?**     | **Total sections included in this build**                |
+| **approvedSections** | **int?**     | **Sections with approved translations at time of build** |
+| **createdBy**        | **ObjectId** | **Ref → User (editor who initiated the build)**          |
+| createdAt            | timestamp    |                                                          |
+| updatedAt            | timestamp    |                                                          |
+
+Index: `{ bookId: 1, versionNumber: -1 }`
+
+### BookVersion
+
+Captures version history snapshots for the book. Each BookBuild automatically creates a BookVersion record; editors can also manually create versions with custom labels (e.g., "Draft for proofreading v2").
+
+| Field         | Type      | Notes                                                          |
+| ------------- | --------- | -------------------------------------------------------------- |
+| \_id          | ObjectId  | PK                                                             |
+| bookId        | ObjectId  | Ref → Book                                                     |
+| versionNumber | int       | Sequential version (1, 2, 3...). Auto-incremented per book.    |
+| buildId       | ObjectId? | Ref → BookBuild (null if manually created without a build)     |
+| label         | string    | Editor-friendly label (e.g. "v1", "Proofread Draft")           |
+| changelog     | string    | Summary of changes since the last version                      |
+| fileKey       | string?   | S3 key for the finalized PDF (null if no build was run)        |
+| createdBy     | ObjectId  | Ref → User (editor who created the version or triggered build) |
+| status        | string    | DRAFT, FINALIZED, ARCHIVED                                     |
+| createdAt     | timestamp |                                                                |
+| updatedAt     | timestamp |                                                                |
+
+Index: `{ bookId: 1, versionNumber: -1 }`
 
 ## Computed / Transient Entities
 
@@ -248,25 +291,15 @@ Returned by `GET /api/translations/history`. Provides a chronological log of tra
 
 Index: `{ bookId: 1, userId: 1 }` unique
 
-### BookBuild
-
-| Field     | Type      | Notes                       |
-| --------- | --------- | --------------------------- |
-| \_id      | ObjectId  | PK                          |
-| bookId    | ObjectId  | Ref → Book                  |
-| fileKey   | string    | S3 key for finalized PDF    |
-| status    | string    | BUILDING, COMPLETED, FAILED |
-| createdAt | timestamp |                             |
-| updatedAt | timestamp |                             |
-
 ## S3 Storage Structure
 
 ```
 books/{bookId}/original.pdf
 books/{bookId}/thumbnail.png
 books/{bookId}/pages/{pageNumber}.png
+books/{bookId}/pages/{pageNumber}-thumb.png
 books/{bookId}/sections/{sectionId}.png     ← cropped section images
-books/{bookId}/finalized.pdf
+books/{bookId}/versions/{versionNumber}/finalized.pdf
 ```
 
 ## Key Relationships
@@ -277,11 +310,14 @@ User ──< BookEditor >── Book
 User ──< Translation >── Section
 User ──< Comment >── Section
 User ──< BookInvitation >── Book
+User ──< BookBuild (createdBy)
+User ──< BookVersion (createdBy)
 Book ──< Page
+Book ──< BookBuild
+Book ──< BookVersion
 Page ──< Section
 Section ──< Translation
 Section ──< AITextExtraction
 Section ──< Comment
 Translation ──< Transliteration
-Book ──< BookBuild
 ```

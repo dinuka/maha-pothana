@@ -228,63 +228,198 @@
 
 ## Epic 5: Book Organization & Publishing
 
+> **Detailed analysis available in:** `specs/business-analysis/20260709-1200-epic5-book-organization.md`
+
+---
+
 ### US-5.1 Organize Pages & Sections
 
 **As an** editor
-**I want to** add, edit, and delete pages and sections
-**So that** the final book structure is correct.
+**I want to** reorder, add, and delete pages; and continue editing section metadata
+**So that** the final book structure is correct before building.
 
 **Acceptance Criteria:**
 
-- Page list view with drag-to-reorder
-- Add a blank page between existing pages
-- Delete a page (with confirmation)
-- Edit section content, position, type
-- Changes tracked with version history
+**Page Reordering (Drag & Drop):**
+
+- Book console displays a page list sorted by the `order` field (defaults to `pageNumber`)
+- Each page item shows: thumbnail, page number, section count, and translation progress
+- Editor can drag pages vertically to reorder; a visual drop indicator shows the target position
+- On drop, frontend sends `PUT /api/books/{bookId}/pages/reorder` with the new order array
+- The `pageNumber` field remains unchanged (reflects original PDF numbering)
+- Undo/redo for reorder actions within the current session
+
+**Add Page:**
+
+- "Add Page" button available at bottom of list and between any two pages
+- New blank page created with `pageNumber=0`, `originalPageNumber="inserted"`, no source image
+- Subsequent pages' `order` values shift to accommodate the insertion
+
+**Delete Page:**
+
+- Delete action per page with confirmation dialog showing page number and section count
+- Backend cascades delete: Page document + all Section, Translation, Comment, AITextExtraction docs
+- Remaining pages' `order` values compacted (no gaps)
+- Minimum one page constraint — delete disabled if only one page remains
+
+**Edit Section Content, Position, Type:**
+
+- Editors can re-open any page's canvas editor from the page list
+- Existing Epic 3 section editing (drag, resize, type change) available even after confirmation
+- Changes tracked via `SectionEditHistory`
+
+**Version History:**
+
+- A "History" panel on the page editor shows a timeline of section snapshots with timestamps and editor names
+- Editors can view past snapshots (read-only) or restore a previous version
+
+---
 
 ### US-5.2 Filter & Sort Translation Progress
 
 **As an** editor
-**I want to** filter and sort pages by translation status
-**So that** I can focus on incomplete work.
+**I want to** filter pages by translation status and sort by completion metrics
+**So that** I can quickly identify incomplete work and track overall progress.
 
 **Acceptance Criteria:**
 
-- Filter: All, Completed, In Progress, Not Started
-- Sort: by page number, by translation % ascending/descending
-- Visual progress bar per page
-- Summary stats: X of Y sections translated
+**Filter by Translation Status:**
+
+- Filter bar with options: All, Not Started, In Progress, Completed, Needs Review
+- Each filter is color-coded (gray/blue/green/amber) and shows the count of matching pages
+- Filter state is persisted in the URL query string for shareable links
+
+**Sort Options:**
+
+- Sort by: page order (default), translation % ascending, translation % descending
+- Sort indicator shows current direction; sorting applies on top of active filter
+
+**Visual Progress:**
+
+- Each page in the list displays a progress bar: `approvedSections / totalSections`
+- Color: gray (0%), blue gradient (1-99%), green (100%)
+- Percentage label to the right of the bar
+
+**Summary Statistics:**
+
+- Stats bar: total pages, total sections, translated sections, overall completion %, sections pending review
+- Updates in near-real-time as translations are approved/rejected
+
+**Edge Cases:**
+
+- Empty state when filter returns zero results: "No pages match — clear filter"
+- Pre-detection state: "Process pages first to see translation progress"
+
+---
 
 ### US-5.3 Review Translations
 
 **As an** editor
-**I want to** see all translations for a section
-**So that** I can select or provide the best one.
+**I want to** review all submitted translations for each section, approve or reject them, and provide my own translation if needed
+**So that** only high-quality, accurate translations make it into the final book.
 
 **Acceptance Criteria:**
 
-- If N translators required, show all N translations side by side
-- Each translation labeled with translator name and timestamp
-- Editor can **approve multiple translations** if they convey the same meaning or accurately represent the source
-- Editor can **reject any or all translations** if they are incorrect
-- Editor can write their **own translation** using the submitted ones as reference
-- If all translations are rejected, the section re-enters the translation pool; translators must keep translating until at least one is approved
-- Approved translation marked clearly with badge
+**Review Console:**
+
+- Accessible from the page list or a dedicated "Review" tab
+- Shows one section at a time with cropped section image at top for reference
+- All N submitted translations displayed side by side (responsive: stacked on narrow screens)
+
+**Translation Cards:**
+
+- Each card shows: translator name + avatar, submission timestamp (relative), translated text, Approve/Reject buttons
+- Approved translations have a green badge and highlighted border
+- Rejected translations are dimmed with strikethrough and a red badge
+
+**Approve Multiple:**
+
+- Editor can approve multiple translations for the same section
+- The section is considered "translated" once at least one translation is approved
+- For build, the most recently approved translation is used
+
+**Reject:**
+
+- Reject shows optional text area for reason; saved to `Translation.rejectionReason`
+- Translator receives in-app notification with rejection reason (if provided)
+
+**Editor Override:**
+
+- Editor can write their own translation, auto-approved and labeled "Editor's Choice"
+- Editor can copy text from any submitted translation as a starting point
+
+**Re-entry Logic:**
+
+- If ALL translations for a section are rejected, section re-enters the translation pool
+- Previously rejected translators may submit improved versions
+- A notification triggers: "Section on page N needs re-translation"
+
+**Audit Trail:**
+
+- Every approve/reject action recorded in `TranslationHistoryItem`
+
+---
 
 ### US-5.4 Build Finalized Book
 
 **As an** editor
-**I want to** generate the finalized translated book
-**So that** it can be downloaded or published.
+**I want to** generate the finalized translated book as a PDF with all approved translations
+**So that** it can be downloaded, shared, or published.
 
 **Acceptance Criteria:**
 
-- "Build" button generates the book with approved translations
-- Processing runs asynchronously
-- Progress indicator during build
-- Final book stored in S3 as PDF
-- Download link available
-- Editor can rebuild anytime (overwrites previous)
+**Pre-conditions:**
+
+- "Build Book" button enabled only when book has sections and at least one approved translation
+- Disabled state shows tooltip explaining what is missing
+- Summary panel shows: total/approved/untranslated/pending section counts
+- Warning if any sections lack approved translations: "This build will skip {N} sections"
+
+**Trigger Build:**
+
+- Confirmation dialog shows counts and warns about skipped sections
+- On confirm, `POST /api/books/{bookId}/build` creates a `BookBuild` with `status: BUILDING`
+- A `BookVersion` is created in `DRAFT` status
+
+**Async Processing (Celery):**
+
+- Iterates pages by `order`, sections by `sectionOrder`
+- For each section: places most recently approved translation text into bounding box on page image
+- Sections without approved translations use original source text as placeholder
+- IMAGE_CAPTION sections embed the cropped image directly
+- Generates PDF, uploads to `books/{bookId}/versions/{versionNumber}/finalized.pdf`
+- On failure: `status: FAILED`, `errorMessage` populated; editor can retry
+
+**Progress & Polling:**
+
+- Frontend polls `GET /api/books/{bookId}/builds/latest` every 3 seconds
+- Progress bar: "Building page 23 of 45..."
+- Estimated time remaining shown
+- "Cancel Build" button available during processing
+
+**Download:**
+
+- On completion, "Download PDF" button appears
+- Presigned S3 URL (1-hour expiry) with filename `{book-title}-v{versionNumber}.pdf`
+- "Copy Link" option for sharing
+
+**Rebuild & Versioning:**
+
+- Rebuild anytime; each build increments `versionNumber`
+- Version history panel: version number, build date, status, approved section count
+- Past versions remain downloadable
+- "Set as Current" option marks the canonical version
+
+**Notifications:**
+
+- In-app notification on completion: "Version {N} ready for download"
+- Badge on book console if user navigated away during build
+- Failed builds: notification with error message and "Retry" button
+
+**Edge Cases:**
+
+- Concurrent builds not allowed — button disabled if build in progress
+- Large books (500+ pages): batched processing with per-batch progress
 
 ## Epic 6: Team Management
 

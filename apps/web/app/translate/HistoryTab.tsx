@@ -125,7 +125,7 @@ export const HistoryTab = ({ filters, onSectionClick }: HistoryTabProps) => {
       <div style={styles.header}>Translation History</div>
       <div style={styles.list}>
         {items.map((item) => (
-          <HistoryItem key={item.translationId} item={item} onClick={onSectionClick} />
+          <HistoryItem key={item.id} item={item} onClick={onSectionClick} />
         ))}
         <div ref={observerRef} style={styles.observer} />
         {loadingMore && (

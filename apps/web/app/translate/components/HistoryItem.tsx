@@ -31,7 +31,7 @@ export const HistoryItem = ({ item, onClick }: HistoryItemProps) => {
       <div style={styles.content}>
         <div style={styles.info}>
           <div style={styles.location}>
-            Page {item.pageNumber}, Section {item.sectionOrder}
+            Page {item.pageNumber}, Section {item.sectionOrder + 1}
           </div>
           <div style={styles.snippet}>&ldquo;{snippet}&rdquo;</div>
           <div style={styles.meta}>

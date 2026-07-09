@@ -44,26 +44,43 @@ async def test_list_pages_pagination(client, mock_db, sample_page):
 
 @pytest.mark.asyncio
 async def test_list_pages_status_filter(client, mock_db, sample_page):
-    mock_db.pages.find.return_value.to_list = AsyncMock(return_value=[sample_page])
-    mock_db.pages.count_documents = AsyncMock(return_value=1)
+    # For non-'all' filters, the aggregation pipeline is used
+    # Need to return different values for stats, count, and main pipeline calls
+    aggr_page_data = {**sample_page,
+        "sectionCount": 0,
+        "approvedSectionCount": 0,
+        "translationSum": 0,
+        "computedStatus": "not_started",
+        "translationPercent": 0,
+        "order": 1,
+    }
+    # Return stats data first, then count, then the main data
+    mock_db.pages.aggregate.return_value.to_list = AsyncMock(
+        side_effect=[
+            [{"totalPages": 1, "totalSections": 0, "translatedSections": 0}],  # stats
+            [{"total": 1}],                                                      # count
+            [aggr_page_data],                                                     # main pipeline
+        ]
+    )
 
     response = await client.get(
-        f'/api/books/{sample_page["book"]["id"]}/pages?status=SECTIONS_CONFIRMED'
+        f'/api/books/{sample_page["book"]["id"]}/pages?filter=SECTIONS_CONFIRMED'
     )
 
     assert response.status_code == 200
-    mock_db.pages.count_documents.assert_awaited_once_with(
-        {"book.id": sample_page["book"]["id"], "status": "SECTIONS_CONFIRMED"}
-    )
-    mock_db.pages.find.assert_called_once_with(
-        {"book.id": sample_page["book"]["id"], "status": "SECTIONS_CONFIRMED"}
-    )
+    data = response.json()
+    assert "pages" in data  # Now returns FilteredPageListResponse
+    assert "pagination" in data
+    assert "stats" in data
 
 
 @pytest.mark.asyncio
 async def test_list_pages_status_all_is_no_filter(client, mock_db, sample_page):
     mock_db.pages.find.return_value.to_list = AsyncMock(return_value=[sample_page])
     mock_db.pages.count_documents = AsyncMock(return_value=1)
+    mock_db.sections.aggregate.return_value.to_list = AsyncMock(
+        return_value=[{"_id": sample_page["_id"], "sectionCount": 0, "translatedCount": 0, "approvedCount": 0}]
+    )
 
     response = await client.get(
         f'/api/books/{sample_page["book"]["id"]}/pages?status=ALL'
@@ -77,22 +94,26 @@ async def test_list_pages_status_all_is_no_filter(client, mock_db, sample_page):
 
 
 @pytest.mark.asyncio
-async def test_list_pages_sort_progress_maps_to_page_number(client, mock_db, sample_page):
-    mock_db.pages.find.return_value.to_list = AsyncMock(return_value=[sample_page])
-    mock_db.pages.count_documents = AsyncMock(return_value=1)
+async def test_list_pages_sort_progress_uses_aggregation(client, mock_db, sample_page):
+    # With sort=PROGRESS, the new code enters the aggregation path
+    mock_db.pages.aggregate.return_value.to_list = AsyncMock(return_value=[])
 
     response = await client.get(
         f'/api/books/{sample_page["book"]["id"]}/pages?sort=PROGRESS'
     )
 
     assert response.status_code == 200
-    mock_db.pages.find.return_value.sort.assert_called_once_with("pageNumber", 1)
+    # Aggregation path was called (not the simple find/sort)
+    assert mock_db.pages.aggregate.called
 
 
 @pytest.mark.asyncio
 async def test_list_pages_default_limit(client, mock_db, sample_page):
     mock_db.pages.find.return_value.to_list = AsyncMock(return_value=[sample_page])
     mock_db.pages.count_documents = AsyncMock(return_value=1)
+    mock_db.sections.aggregate.return_value.to_list = AsyncMock(
+        return_value=[{"_id": sample_page["_id"], "sectionCount": 0, "translatedCount": 0, "approvedCount": 0}]
+    )
 
     response = await client.get(f'/api/books/{sample_page["book"]["id"]}/pages')
 
@@ -158,11 +179,13 @@ async def test_trigger_section_detection(client, mock_db, sample_page):
 
 
 @pytest.mark.asyncio
-async def test_save_sections(client, mock_db, sample_page):
+async def test_save_sections(client, mock_db, sample_page, sample_user):
     mock_db.pages.find_one = AsyncMock(return_value=sample_page)
     mock_db.sections.delete_many = AsyncMock()
     mock_db.sections.insert_one = AsyncMock()
     mock_db.pages.update_one = AsyncMock()
+    mock_db.users.find_one = AsyncMock(return_value=sample_user)
+    mock_db.section_edit_history.insert_one = AsyncMock()
 
     with patch("app.api.pages.crop_sections") as mock_crop:
         response = await client.put(
@@ -185,11 +208,13 @@ async def test_save_sections(client, mock_db, sample_page):
 
 
 @pytest.mark.asyncio
-async def test_save_sections_recalculates_order(client, mock_db, sample_page):
+async def test_save_sections_recalculates_order(client, mock_db, sample_page, sample_user):
     mock_db.pages.find_one = AsyncMock(return_value=sample_page)
     mock_db.sections.delete_many = AsyncMock()
     mock_db.sections.insert_one = AsyncMock()
     mock_db.pages.update_one = AsyncMock()
+    mock_db.users.find_one = AsyncMock(return_value=sample_user)
+    mock_db.section_edit_history.insert_one = AsyncMock()
 
     sections = [
         {"id": "s3", "type": "FOOTNOTE", "x": 10, "y": 500, "width": 200, "height": 50},

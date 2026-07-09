@@ -679,26 +679,242 @@ Page:  1    2    3    4    5    6    7    8    ...
 - Target Languages (multi-select, required — one or more languages to translate into)
 - Description (optional, textarea)
 
-### 6. Book Organization
+### 6. Book Console Layout (Updated — Epic 5)
 
-- Drag-to-reorder pages in sidebar list
-- Status badges: ✅ Completed, ⏳ In Progress, ❌ Not Started, 🔄 Processing
-- Progress bar per book (compact): green/yellow/red fill
-- Filter buttons: All | Completed | In Progress | Not Started
-- Sort: Page Number | Progress %
+The book console is updated with a richer sidebar that includes page reordering, progress tracking, filter/sort capabilities, and new panels for translation review, book building, and version history.
 
-### 7. Translation Review (Editor)
+### 7. Page Reorder Interaction
 
-- Side-by-side comparison of all submitted translations per section
-- Each translation card shows: translator name, timestamp, translated text, exact letter text (if provided)
-- **Approve** button on each card (green) — editor can approve **multiple** translations if they convey the same meaning
-- **Reject** button on each card (red) — editor can reject specific translations
-- **Reject All** button — if all are rejected, section re-enters the translation pool for translators to retry
-- **"Write your own"** text area for editor's version, using submitted translations as reference
-- **Approved** translation marked with star badge
-- **Rejected** translation marked with strikethrough and "Rejected" badge
-- If all translations rejected, show: "All translations rejected. Translators will need to resubmit."
-- Visual diff between original and approved translation
+| State        | Visual                                                                                                                                                                                                                                                   | Description                                    |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **Idle**     | Page list items show drag handle icons (⋮⋮) on the left of each item. Items display thumbnail, page number, progress bar, and section count.                                                                                                             | Default state — pages sorted by `order` field. |
+| **Hover**    | Cursor changes to `grab` on the drag handle area. Minor background highlight (150ms transition).                                                                                                                                                         | User hovers over drag handle zone.             |
+| **Dragging** | Dragged item lifts with box shadow (elevation 4), reduced opacity (0.85). A horizontal drop indicator line (2px primary blue, 16px inset) appears at the target position between items. Other items shift apart with 200ms ease animation to make space. | User grabs handle and drags vertically.        |
+| **Dropped**  | Item animates to new position (200ms ease-out). Toast appears: "Page order updated" with Undo button.                                                                                                                                                    | Drop completes successfully.                   |
+| **Conflict** | Optimistic reorder is reverted. Toast: "Page order was modified by another editor — refresh to see latest" with [Refresh] button.                                                                                                                        | Backend returns 409 Conflict.                  |
+
+**Interaction Details:**
+
+- **Drag threshold**: 8px vertical movement before drag starts (prevents accidental drag on click)
+- **Drag sensitivity**: Items auto-scroll the list when dragged near the top/bottom edge (scroll zone: 40px from edge, scroll speed: 1 item per 150ms)
+- **Add Page between**: An "Add Page" button (40px tall, dashed border, "+" icon) appears between any two pages. Clicking inserts a blank page at that position. The button is only visible on hover of the gap area.
+- **Delete Page**: Each page item has a delete icon (trash) visible on hover or in a context menu (three-dot menu on each item). Clicking shows a confirmation dialog with page number and section count before deletion. Delete disabled if only one page remains (tooltip "A book must have at least one page").
+- **Undo reorder**: After a reorder, a toast with "Undo" button appears for 5 seconds. Clicking restores the previous order via a single API call with the old order array.
+- **Keyboard reorder**: Alt+↑ moves the selected page up one position; Alt+↓ moves it down one position. Focus on the page list item is required.
+
+### 8. Filter & Sort Bar
+
+**Layout (sticky at top of page list):**
+
+**Filter States:**
+
+| Chip         | Color           | Icon | Behavior                                                              |
+| ------------ | --------------- | ---- | --------------------------------------------------------------------- |
+| All          | Neutral         | —    | Clears all filters, shows all pages                                   |
+| Not Started  | Gray `#6B7280`  | ⬜   | Pages with 0 approved sections                                        |
+| In Progress  | Blue `#2563EB`  | 🔵   | Pages with 1–99% approved sections                                    |
+| Completed    | Green `#16A34A` | 🟢   | Pages with 100% approved sections                                     |
+| Needs Review | Amber `#F59E0B` | 🟠   | Pages where all sections have submitted translations pending approval |
+
+**Sort Options:**
+
+| Option               | Icon            | Behavior                                   |
+| -------------------- | --------------- | ------------------------------------------ |
+| Page Order (default) | `Order ↑` / `↓` | Sorts by `order` field. Default ascending. |
+| Translation % ↑      | `% ↑`           | Least completed first                      |
+| Translation % ↓      | `% ↓`           | Most completed first                       |
+| Page Order ↓         | `Order ↓`       | Reverse order                              |
+
+**Interaction Details:**
+
+- Filter chips are single-select (clicking one deselects the previous, clicking the active one returns to "All")
+- Filter state persists in URL: `?filter=in_progress&sort=translation_percent&order=desc`
+- Clicking the active filter again clears it (shows All)
+- Sort direction toggles on second click of same sort option
+- Summary stats bar shows near-real-time counts (polled every 10s or via WebSocket)
+- Empty filter state: "No pages match the selected filter" with [Clear Filter] button
+- Pre-detection state: "Process pages first to see translation progress"
+
+**Progress Bar (per page item):**
+
+| Percent | Color                               | Width        |
+| ------- | ----------------------------------- | ------------ |
+| 0%      | Gray `#CBD5E1`                      | Empty bar    |
+| 1–99%   | Blue gradient `#60A5FA` → `#2563EB` | Proportional |
+| 100%    | Green `#22C55E`                     | Full width   |
+
+- Progress bar shows `approvedSections / totalSections` with percentage label on the right
+- Bar fill animates with 600ms ease-out when progress changes
+- Compact design: 8px height, rounded corners (4px radius), full width of page item
+
+### 9. Translation Review Panel
+
+The review panel is accessible from the Book Console's "Review" tab or by clicking a section with submitted translations from the page list.
+
+**Layout:**
+
+**Translation Card States:**
+
+| State               | Visual                                                                                                                                                              | Action                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| **Pending**         | White background, neutral border. Approve/Reject buttons enabled.                                                                                                   | Awaiting editor decision.                    |
+| **Approved**        | Green border (2px), green ✓ APPROVED badge top-right. Background tint green `#F0FDF4`. Approve button disabled. Reject still available.                             | Card elevated with subtle green glow.        |
+| **Rejected**        | Dimmed opacity (0.6), strikethrough text, red ✕ REJECTED badge, red border. Expandable rejection reason. Reject disabled. Approve still available as "re-override". | Translator notified via in-app notification. |
+| **Editor's Choice** | Purple border (2px), purple star badge ⭐ EDITOR'S CHOICE. No action buttons (auto-approved).                                                                       | Created by editor override.                  |
+
+**Reject Interaction:**
+
+1. Click "Reject" → card shows inline expandable text area: "Reason for rejection (optional)"
+2. Type reason (max 500 chars, shown with character counter)
+3. Press Enter to submit, Escape to cancel
+4. On submit → card transitions to Rejected state with 300ms dimming animation
+5. Translator receives in-app notification with rejection reason
+
+**Editor Override Interaction:**
+
+- "Copy from [Translator Name]" buttons copy that translator's text to the editor textarea
+- Textarea is a standard auto-resize textarea (min 4 rows, max 20 rows)
+- "Submit as Editor's Choice" creates an auto-approved translation labeled "Editor's Choice"
+- The override is stored as a regular Translation with `translatorId` = editor's ID
+
+**Navigation:**
+
+- "Previous Section" / "Next Section" buttons navigate through sections on the same page
+- Navigation wraps: last section on page navigates to first section of next page
+- Section counter: "Section 2 of 12 (Page 3)"
+
+### 10. Build Panel
+
+The build panel is accessible from the Book Console's "Build" tab and from a build button at the bottom of the sidebar.
+
+**Layout:**
+
+**Build States & Transitions:**
+
+| State         | Trigger                                                        | Visual                                                   | Actions                                                              |
+| ------------- | -------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Idle**      | Panel loaded, no build running                                 | Summary counts, Build button                             | Click "Build" → confirmation dialog → enter Building                 |
+| **Disabled**  | Pre-conditions not met (no sections, no approved translations) | Button grayed out, tooltip explains why                  | Hover tooltip: "No approved translations — review and approve first" |
+| **Building**  | POST /api/books/{bookId}/build triggered                       | Progress bar with percentage + "Building page X of Y..." | Cancel Build                                                         |
+| **Completed** | Celery task finishes successfully                              | Green checkmark, duration, version number                | Download PDF, Copy Link                                              |
+| **Failed**    | Celery task errors                                             | Red X, error message                                     | Retry Build, Dismiss                                                 |
+
+**Confirmation Dialog (before build):**
+
+**Build Progress Details:**
+
+- Progress bar height: 8px, rounded corners, gradient fill (primary blue)
+- Percentage label centered below bar: "64%"
+- Text below: "Building page 23 of 45..." (with animated dots)
+- ETA: "Estimated time: ~44 seconds" (computed from avg time per page × remaining pages)
+- Polling: `GET /api/books/{bookId}/builds/latest` every 3s (initial), backing off to 5s after 30s, 10s after 2min, 15s after 5min
+- Cancel: sends `DELETE /api/books/{bookId}/builds/latest`, shows "Cancelling..." then returns to Idle
+
+**Download Details:**
+
+- "Download PDF" triggers `GET /api/books/{bookId}/versions/{versionNumber}/download` returning a presigned S3 URL with 1-hour expiry
+- If URL expires, show toast "Download link expired — generate new link" and auto-regenerate
+- "Copy Link" copies presigned URL to clipboard, shows brief "Link copied!" toast
+- Filename: `{book-title}-v{versionNumber}.pdf`
+- Download available to all roles (including TRANSLATOR)
+
+### 11. Version History Panel
+
+The version history panel is accessible from a sidebar tab or button in the Book Console.
+
+**Version Item States:**
+
+| State                       | Visual                                          | Actions                    |
+| --------------------------- | ----------------------------------------------- | -------------------------- |
+| **FINALIZED** (current)     | Green left border, ✅ badge, "⭐ Current" label | Download, View details     |
+| **FINALIZED** (not current) | Neutral background                              | Download, Set as Current   |
+| **FAILED**                  | Red left border, ❌ badge, error message        | Retry, Dismiss             |
+| **DRAFT**                   | Blue left border, draft label                   | (no download — no PDF yet) |
+
+**Interaction Details:**
+
+- "Create Version" button opens a modal: Label (e.g., "Proofread v2"), Description (optional changelog)
+- "Set as Current" marks a version as canonical. Checkmark icon and "⭐ Current" label move to the selected version
+- "Download" triggers same download flow as Build panel with presigned URL
+- Clicking a version row expands it to show more details (sections at build time, per-page breakdown)
+- Past failed builds remain in the list; dismissing removes from view (audit log retains record)
+- Empty state: "No versions built yet. Use the Build panel to create your first version."
+
+### 12. Filter/Sort Bar — Detailed Interaction
+
+**Sticky Behavior:**
+
+- Filter bar and summary stats bar are sticky within the sidebar container
+- They remain visible while scrolling through the page list
+- On mobile, they collapse into a compact bar with a "Show Filters" toggle button
+
+**Chip Animation:**
+
+- Activating a filter chip: 150ms scale-up to 1.05, then back to 1.0, background color transition (200ms)
+- Deactivating: background color fades to neutral over 200ms
+- Chip count badge bounces briefly on count update
+
+**Summary Stats Bar States:**
+| State | Visual |
+|---|---|
+| **Data loaded** | Row of stat items with icons and numbers |
+| **Zero values** | Stats show "0" — always shows structure |
+| **Loading** | Skeleton placeholders for each stat number |
+| **Updated** | Numbers animate up/down with 300ms transition |
+
+### 13. Translation Cards — Expandable Reject Reason
+
+A rejected translation card can expand to show the rejection reason:
+
+- Rejection reason area collapsed by default, expandable via chevron toggle
+- Animation: 200ms expand/collapse with height transition
+- Even after rejection, Approve button remains as "✓ Approve (re-override)" — allows reversing
+
+### 14. Build Progress — Polling & Progress Bar Animation
+
+**Polling Schedule:**
+
+**Progress Bar Animation:**
+
+- Width animates via CSS `transition: width 600ms ease-out`
+- Label updates with each poll response
+- ETA fades in/out when value changes (200ms opacity)
+- On completion: bar fills 100% with brief green flash (400ms pulse)
+
+**Cancel Interaction:**
+
+1. Click "Cancel Build"
+2. Confirmation: "Are you sure? Partial artifacts will be discarded."
+3. On confirm: sends DELETE, shows "Cancelling..." spinner
+4. On success: returns to Idle with toast "Build cancelled"
+5. On failure: toast "Failed to cancel build"
+
+### 15. Download Button — Presigned URL Expiry
+
+| Time Remaining | Visual                               | Behavior                             |
+| -------------- | ------------------------------------ | ------------------------------------ |
+| > 30 min       | Normal button                        | Click triggers download              |
+| 5–30 min       | "Link expires in {N} minutes"        | Subtle warning below button          |
+| < 5 min        | "Link expiring soon"                 | Yellow warning, auto-refresh URL     |
+| Expired        | "Link expired — click to regenerate" | Red badge, click regenerates via API |
+
+- Each click calls API to generate fresh presigned URL
+- "Copy Link" copies current URL to clipboard
+- URL auto-refreshes after 30 min if user stays on page
+
+### 16. Page List — Summary Stats Bar Elements
+
+| Stat               | Display                   | Example                  |
+| ------------------ | ------------------------- | ------------------------ |
+| Total pages        | `{n} pages`               | "45 pages"               |
+| Total sections     | `{n} sections`            | "320 sections"           |
+| Overall completion | `{n}%`                    | "90.6%"                  |
+| Pending review     | `{n} pending`             | "15 pending"             |
+| Warning            | ⚠️ `{n} without approval` | "⚠️ 30 without approval" |
+
+- Stats refresh every 10s (polling)
+- Each stat highlights briefly on change (300ms yellow background flash)
+- All-complete state: green stats bar with brief sparkle celebration animation
 
 ## Color Palette
 
@@ -758,6 +974,21 @@ Section Types:
 | Page grid          | Horizontal scroll with fixed cell size          | Horizontal scroll, smaller cells      | Wrap to multiple rows, tap to expand            |
 | Translator table   | Full-width table with all columns               | Table with some columns hidden        | Card layout per translator                      |
 
+## Responsive Behavior — Epic 5
+
+| Element                           | Desktop (>1024px)                                      | Tablet (768–1024px)                                              | Mobile (<768px)                                                             |
+| --------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Page list with drag reorder       | Full drag handles, mouse drag, keyboard Alt+Arrow      | Touch drag with long-press activation, visible grab handles      | Long press to initiate drag (haptic), compact items with smaller handles    |
+| Page list items                   | Thumbnail (48x48), progress bar, section count, labels | Thumbnail (40x40), condensed progress bar                        | Thumbnail (32x32), no progress bar (shown on tap), compact text             |
+| Filter/sort bar                   | Sticky horizontal bar, all chips visible               | Sticky, chips wrap to 2 rows, compact                            | Collapsible bar with "Show Filters" toggle, chips in drawer                 |
+| Summary stats bar                 | Full row: pages, sections, %, pending                  | Compact: pages, %, pending only                                  | Hidden by default, shown in stats drawer                                    |
+| Review panel (side-by-side cards) | Two cards side-by-side (or N-up for N translators)     | Cards in 1.5-column: primary card full, secondary card 50% width | Stacked vertically: one card full width, second below                       |
+| Review panel — section image      | 50% width at top, side-by-side                         | 40% width, collapsible                                           | Full width, fixed 200px height                                              |
+| Review — editor override          | Sidebar section below cards, full width                | Below cards, full width                                          | Bottom of scroll: compact textarea, "Copy" buttons stacked                  |
+| Build panel                       | Full panel with summary, progress bar, download        | Full panel, narrower summary text                                | Compact: collapsible summary, progress bar only, download button full-width |
+| Build progress                    | Full progress bar with ETA text                        | Progress bar, ETA on separate line                               | Thin progress bar (4px), compact label: "23/45 pages"                       |
+| Version history                   | Full list with all metadata                            | List with truncated metadata, tap to expand                      | Compact list: version number + status only, tap for details                 |
+
 ## Accessibility
 
 ### Keyboard Navigation
@@ -805,6 +1036,64 @@ Section Types:
 - Extract button has `aria-label="Extract text from section image"`
 - Regenerate button has `aria-label="Regenerate AI extraction for this section"`
 
+### Book Console — Epic 5 Accessibility
+
+#### Keyboard Navigation
+
+- Page list items are focusable via Tab key, drag handles also focusable
+- Alt+Arrow keyboard reorder (Alt+↑ move up, Alt+↓ move down)
+- Filter chips focusable, activated via Enter/Space
+- Sort dropdown focusable, activated via Enter
+- Translation cards in review panel: Tab through cards, Enter/Space on Approve/Reject buttons
+- Build Cancel button focusable and activatable via keyboard
+- Version history items focusable, Enter to expand, Tab through actions
+
+#### Screen Reader Support
+
+- **Page list**: `role="list"` with `aria-label="Book pages"`
+- **Page items**: `role="listitem"` with `aria-label="Page {number}, {progress percent} complete, {N} sections"`
+- **Drag handles**: `role="button"` with `aria-label="Drag to reorder page {number}"`, `aria-grabbed="false/true"`
+- **Reorder drop zone**: `aria-dropeffect="move"` on the page list container
+- **Filter chips**: `role="radio"` within `role="radiogroup"`, `aria-pressed` for active state
+- **Summary stats**: `role="region"` with `aria-label="Translation summary statistics"`, live region for updates
+- **Translation cards**: `role="region"` with `aria-label="Translation by {translator name}, {status}"`
+- **Approve button**: `aria-label="Approve translation by {name}"`, `aria-disabled` when already approved
+- **Reject button**: `aria-label="Reject translation by {name}"`, expands textarea on activation
+- **Rejection reason**: `aria-label="Reason for rejection"`, `aria-required="false"`
+- **Editor override textarea**: `aria-label="Editor's translation"`, `aria-describedby` with status
+- **Build progress**: `role="progressbar"` with `aria-valuenow`, `aria-valuemin="0"`, `aria-valuemax="100"`, descriptive `aria-label="Building book page {current} of {total}"`
+- **Build cancel**: `aria-label="Cancel build"`
+- **Download button**: `aria-label="Download version {versionNumber}"`
+- **Copy Link**: `aria-label="Copy download link"`
+- **Version history**: `role="list"` with `aria-label="Version history"`
+- **Version items**: `role="listitem"` with `aria-label="Version {number}, {status}, built on {date}"`
+- **Set as Current**: `aria-label="Set version {number} as current version"`
+- **Add Page button**: `aria-label="Add blank page here"`
+- **Delete Page button**: `aria-label="Delete page {number}"` with confirmation dialog announcing page details
+- **Toast notifications**: `role="status"` with `aria-live="polite"`
+- **Conflict toast**: `role="alert"` with `aria-live="assertive"` (important, immediate announcement)
+
+#### Color Contrast
+
+- Filter chips use both color AND text labels (not color alone)
+- Progress bar has percentage label for screen readers
+- Translation card states (Approved/Rejected) use borders + badges + icons, not color alone
+- Build status (COMPLETED/FAILED) uses checkmark/red X + text
+- Version history status badges use icons and text
+- Drag handle icons are visible (not just functional) — `⋮⋮` pattern ensures visibility
+
+#### Focus Management
+
+- Opening Review panel: focus moves to the first translation card
+- After approving: focus stays on the next unactioned card (or moves to next section)
+- After rejecting: focus moves to the rejection reason textarea
+- After submitting editor override: focus moves to "Next Section" button
+- Clicking "Build": focus moves to the Build panel
+- Build complete: focus moves to Download button
+- Version history open: focus moves to the first version item
+- Filter/sort change: announce result count via aria-live region
+- Keyboard reorder: announce new position via aria-live region
+
 ### Translation Page Keyboard Shortcuts
 
 | Key          | Context                          | Action                             |
@@ -822,6 +1111,20 @@ Section Types:
 - Keyboard shortcuts only fire when no text input is focused or when the image area is focused
 - Tooltips on zoom buttons show the associated shortcut (e.g., "Zoom in (+)")
 - A small `[?]` help button in the toolbar can toggle a keyboard shortcut cheat sheet overlay
+
+### Book Console — Epic 5 Keyboard Shortcuts
+
+| Key      | Context                                | Action                                                          |
+| -------- | -------------------------------------- | --------------------------------------------------------------- |
+| `Ctrl+F` | Page list focused                      | Focus filter/sort bar                                           |
+| `A`      | Review panel, translation card focused | Approve the selected translation                                |
+| `R`      | Review panel, translation card focused | Reject the selected translation (shows reason textarea)         |
+| `B`      | Book Console (any panel)               | Trigger build (opens confirmation dialog if pre-conditions met) |
+| `Alt+↑`  | Page list item focused                 | Move page up one position                                       |
+| `Alt+↓`  | Page list item focused                 | Move page down one position                                     |
+| `Ctrl+Z` | After reorder                          | Undo last reorder action                                        |
+| `Escape` | Reject reason textarea                 | Cancel rejection, close textarea                                |
+| `Enter`  | Reject reason textarea                 | Submit rejection with reason                                    |
 
 ## Micro-interactions
 
@@ -856,3 +1159,34 @@ Section Types:
 - **Bidirectional sync indicator**: Brief 200ms highlight on the panel that receives synced data
 - **Extraction polling spinner**: Continuous rotation while polling extraction status
 - **AI text reveal**: 300ms fade-in when OCR text transitions to AI text after extraction completes
+
+- **Drag reorder start**: 100ms lift animation, item elevates with shadow, slight scale (0.98) press feedback before drag starts
+- **Drop indicator**: 200ms fade-in of blue indicator line at target position
+- **Reorder other items shift**: 200ms ease-out translateY animation for adjacent items making space
+- **Drop complete**: 200ms ease-out settle animation as item drops into new position
+- **Reorder undo toast**: Slide-in from top-right, 5s display with progress bar, "Undo" button
+- **Reorder conflict revert**: 200ms items snap back to original positions, red flash on reverted items
+- **Filter chip select**: 150ms scale-up to 1.05 then back to 1.0, 200ms background color transition
+- **Filter chip count update**: Brief bounce (1.2→1.0 scale, 200ms) on count badge
+- **Summary stat update**: 300ms number animate (count-up animation), brief yellow background flash (200ms)
+- **Progress bar change**: 600ms ease-out width transition on the fill bar
+- **Translation approve**: Card border color transitions from neutral to green over 200ms, background fades to green tint (300ms), green badge scales in (200ms scale 0.8→1.0)
+- **Translation reject (dim)**: 300ms opacity transition from 1.0 to 0.6, strikethrough text animates in (200ms)
+- **Rejection reason expand**: 200ms max-height animation with smooth content reveal
+- **Editor override copy**: Brief highlight (200ms blue glow) on the copied-from card
+- **Editor override submit**: Flash on button (checkmark appears), 300ms, then card appears with purple border
+- **Build progress bar fill**: 600ms ease-out width transition, same as other progress bars
+- **Build page counter**: Number updates with 200ms fade in/out as new page count arrives from poll
+- **Build ETA update**: 200ms opacity fade when ETA value changes
+- **Build complete transition**: Progress bar fills to 100% with 400ms green flash pulse, then download button appears with 200ms fade-in
+- **Build cancel**: Button shows spinner for 200ms, then transitions back to Idle state
+- **Download button appear**: 300ms fade-in with slight scale-up from 0.95 to 1.0
+- **Copy Link feedback**: 200ms "Link copied!" toast slides in, 2s auto-dismiss
+- **Download link expiry warning**: 300ms fade-in of warning text below button
+- **Version history expand**: 200ms content height animation, slight background highlight
+- **Set as Current**: 300ms checkmark animation, "⭐ Current" label slides in from right
+- **Version create modal**: 200ms backdrop fade, modal scales in (0.95→1.0, 200ms)
+- **Add Page button**: 150ms hover highlight, button appears on gap hover with fade-in (200ms)
+- **Page delete confirmation**: Dialog slides in from center (200ms), destructive "Delete" button has brief pulse
+- **Skeleton placeholders in stats bar**: Pulsing shimmer animation (1.5s infinite, linear gradient sweep)
+- **Toast notifications (Epic 5)**: Slide-in from top-right, 3s display (success) / 5s (error/conflict), progress bar counts down

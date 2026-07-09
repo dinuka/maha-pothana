@@ -86,6 +86,12 @@ describe("BookProgressHeader", () => {
 
     expect(screen.getByText("Per-Language Breakdown")).toBeInTheDocument()
     expect(screen.getByText("Per-Page Breakdown")).toBeInTheDocument()
+
+    // Expanding triggers a translator-stats fetch in a second effect; let it
+    // settle so the resulting setState isn't left dangling outside act().
+    await waitFor(() => {
+      expect(apiFetchBrowser).toHaveBeenCalledWith(`/api/books/book-1/translators/stats`)
+    })
   })
 
   it("renders an error message on failure", async () => {

@@ -51,10 +51,11 @@ describe("HistoryTab", () => {
         Promise.resolve({
           items: [
             {
+              id: "h1",
               translationId: "t1",
               sectionId: "s1",
               pageNumber: 1,
-              sectionOrder: 1,
+              sectionOrder: 0,
               translatorId: "u1",
               translatorName: "Kamal",
               translatedText: "Translation text here",

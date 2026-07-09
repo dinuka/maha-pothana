@@ -182,7 +182,15 @@ async def test_delete_book_not_found(client, mock_db):
 @pytest.mark.asyncio
 async def test_build_book(client, mock_db, sample_book):
     mock_db.books.find_one = AsyncMock(return_value=sample_book)
-    mock_db.pages.count_documents = AsyncMock(side_effect=[2, 2])
+    mock_db.pages.count_documents = AsyncMock(return_value=2)
+    mock_db.book_builds.find_one = AsyncMock(return_value=None)
+    mock_db.translations.count_documents = AsyncMock(return_value=5)
+    mock_db.sections.count_documents = AsyncMock(return_value=10)
+    mock_db.book_versions.find_one = AsyncMock(return_value=None)
+    mock_db.book_versions.insert_one = AsyncMock()
+    mock_db.book_builds.insert_one = AsyncMock()
+    mock_db.book_builds.insert_one.return_value.inserted_id = "507f1f77bcf86cd799439999"
+    mock_db.book_versions.update_one = AsyncMock()
 
     with patch("app.tasks.build_book.build_book") as mock_build:
         response = await client.post(
@@ -203,14 +211,15 @@ async def test_build_book_not_found(client, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_build_book_blocked_when_pages_not_finalized(client, mock_db, sample_book):
+async def test_build_book_blocked_when_in_progress(client, mock_db, sample_book):
     mock_db.books.find_one = AsyncMock(return_value=sample_book)
-    mock_db.pages.count_documents = AsyncMock(side_effect=[2, 1])
+    mock_db.pages.count_documents = AsyncMock(return_value=2)
+    mock_db.book_builds.find_one = AsyncMock(return_value={"_id": "existing_build", "status": "BUILDING"})
 
     with patch("app.tasks.build_book.build_book") as mock_build:
         response = await client.post(
             f'/api/books/{sample_book["_id"]}/build'
         )
 
-    assert response.status_code == 400
+    assert response.status_code == 409
     mock_build.delay.assert_not_called()

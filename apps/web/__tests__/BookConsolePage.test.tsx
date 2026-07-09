@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { render, screen, waitFor, fireEvent } from "@testing-library/react"
+import { act, render, screen, waitFor, fireEvent } from "@testing-library/react"
 import React from "react"
 
 import BookConsolePage from "@/app/books/[bookId]/page"
@@ -89,11 +89,11 @@ describe("BookConsolePage", () => {
     fetchMock.mockClear()
 
     const filterSelect = screen.getAllByRole("combobox")[0]
-    fireEvent.change(filterSelect!, { target: { value: "SECTIONS_CONFIRMED" } })
+    fireEvent.change(filterSelect!, { target: { value: "completed" } })
 
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([url]: [string]) => url.includes("/pages?"))
-      expect(call?.[0]).toContain("status=SECTIONS_CONFIRMED")
+      expect(call?.[0]).toContain("status=completed")
       expect(call?.[0]).toContain("skip=0")
       expect(call?.[0]).toContain("limit=35")
     })
@@ -146,7 +146,9 @@ describe("BookConsolePage", () => {
       return Promise.resolve(jsonResponse(bookResponse))
     })
 
-    capturedCallback?.([{ isIntersecting: true }])
+    act(() => {
+      capturedCallback?.([{ isIntersecting: true }])
+    })
 
     await waitFor(() => {
       expect(screen.getByText("40")).toBeInTheDocument()
@@ -193,10 +195,14 @@ describe("BookConsolePage", () => {
     })
 
     // fire twice synchronously, before the first fetch resolves
-    capturedCallback?.([{ isIntersecting: true }])
-    capturedCallback?.([{ isIntersecting: true }])
+    act(() => {
+      capturedCallback?.([{ isIntersecting: true }])
+      capturedCallback?.([{ isIntersecting: true }])
+    })
 
-    resolveFetch?.()
+    await act(async () => {
+      resolveFetch?.()
+    })
 
     await waitFor(() => {
       expect(screen.getByText("40")).toBeInTheDocument()

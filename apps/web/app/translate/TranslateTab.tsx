@@ -54,6 +54,8 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
   const [extracting, setExtracting] = useState(false)
   const [transliterating, setTransliterating] = useState(false)
   const [reverseTransliterating, setReverseTransliterating] = useState(false)
+  const [generatingAll, setGeneratingAll] = useState(false)
+  const [generateAllError, setGenerateAllError] = useState<string | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [wordByWordMeaning, setWordByWordMeaning] = useState<string | null>(null)
   const [fullMeaning, setFullMeaning] = useState<string | null>(null)
@@ -148,6 +150,7 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
       if (currentFilters.language) params.set("language", currentFilters.language)
       if (currentFilters.page) params.set("page", String(currentFilters.page))
       if (currentFilters.status) params.set("status", currentFilters.status)
+      if (currentFilters.sectionId) params.set("section_id", currentFilters.sectionId)
       const qs = params.toString()
 
       const res = await apiFetchBrowser(`/api/sections/next${qs ? `?${qs}` : ""}`)
@@ -172,6 +175,7 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
       setFullMeaning(data.fullMeaning)
       setSimplifiedMeaning(data.simplifiedMeaning)
       setAnalyzeError(null)
+      setGenerateAllError(null)
       resetDirty()
       fetchMyTranslation(data.id)
       fetchExtraction(data.id)
@@ -557,6 +561,96 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
     }
   }
 
+  const applyGenerateAllResult = (data: {
+    aiExtractedText?: string | null
+    transliteratedText?: string | null
+    wordByWordMeaning?: string | null
+    fullMeaning?: string | null
+    simplifiedMeaning?: string | null
+  }) => {
+    if (data.aiExtractedText) {
+      setAiText(data.aiExtractedText)
+      setExtractionStatus("extracted")
+    }
+    if (data.transliteratedText) {
+      setTransliteration({
+        text: data.transliteratedText,
+        source: "ai",
+        loading: false,
+        error: false,
+      })
+      setExactLetter(data.transliteratedText)
+      saveExactLetter(data.transliteratedText)
+    }
+    if (data.wordByWordMeaning) setWordByWordMeaning(data.wordByWordMeaning)
+    if (data.fullMeaning) setFullMeaning(data.fullMeaning)
+    if (data.simplifiedMeaning) setSimplifiedMeaning(data.simplifiedMeaning)
+  }
+
+  const handleGenerateAll = async (force = false) => {
+    if (!section || generatingAll) return
+    setGeneratingAll(true)
+    setGenerateAllError(null)
+    try {
+      const forceParam = force ? "&force=true" : ""
+      const res = await apiFetchBrowser(
+        `/api/sections/${section.id}/generate-all?target_script=sinhala${forceParam}`,
+        { method: "POST" },
+      )
+      if (!res.ok && res.status !== 409) {
+        setGeneratingAll(false)
+        setGenerateAllError(`Generation failed (${res.status})`)
+        return
+      }
+
+      let attempts = 0
+      const poll = setInterval(async () => {
+        attempts++
+        if (attempts > 30) {
+          clearInterval(poll)
+          setGeneratingAll(false)
+          setGenerateAllError("Generation timed out. Please try again.")
+          return
+        }
+        try {
+          const pollRes = await apiFetchBrowser(`/api/sections/${section.id}/generate-all`)
+          if (pollRes.ok) {
+            const data = (await pollRes.json()) as {
+              status: string
+              aiExtractedText?: string | null
+              transliteratedText?: string | null
+              wordByWordMeaning?: string | null
+              fullMeaning?: string | null
+              simplifiedMeaning?: string | null
+              error?: string | null
+            }
+            if (
+              data.status === "completed" ||
+              data.status === "partial" ||
+              data.status === "failed"
+            ) {
+              clearInterval(poll)
+              applyGenerateAllResult(data)
+              setGeneratingAll(false)
+              if (data.status === "failed") {
+                setGenerateAllError(data.error || "Generation failed. Please try again.")
+              } else if (data.status === "partial") {
+                setGenerateAllError(
+                  data.error || "Some steps failed. You can regenerate them individually.",
+                )
+              }
+            }
+          }
+        } catch {
+          /* continue polling */
+        }
+      }, 2000)
+    } catch {
+      setGeneratingAll(false)
+      setGenerateAllError("Network error. Please check your connection.")
+    }
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchNextSection(filters)
@@ -649,6 +743,26 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
                 }}
               >
                 {transitioning ? "Loading..." : "Skip"}
+              </button>
+              <button
+                onClick={() => handleGenerateAll()}
+                disabled={
+                  generatingAll || extracting || transliterating || analyzing || transitioning
+                }
+                title="Generate source text, exact letters, and verse analysis in one request"
+                style={{
+                  ...styles.regenerateBtn,
+                  cursor:
+                    generatingAll || extracting || transliterating || analyzing || transitioning
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    generatingAll || extracting || transliterating || analyzing || transitioning
+                      ? 0.7
+                      : 1,
+                }}
+              >
+                {generatingAll ? "Generating..." : "Generate All"}
               </button>
               <button
                 onClick={handleSave}
@@ -829,6 +943,7 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
             <DraftSaveIndicator visible={showSavedIndicator} />
 
             {successMessage && <div style={styles.successBox}>{successMessage}</div>}
+            {generateAllError && <div style={styles.errorPanel}>{generateAllError}</div>}
           </div>
 
           {myTranslation && !myTranslation.isApproved && (

@@ -351,3 +351,23 @@ async def test_transliterate_section_not_found(client, mock_db):
     )
 
     assert response.status_code == 404
+
+
+def test_strip_reasoning_removes_think_block():
+    from app.services.ai_text import strip_reasoning
+
+    raw = "<think>Let me look at the image and reason about it...</think>तस्य पालायतः सम्यक्"
+    assert strip_reasoning(raw) == "तस्य पालायतः सम्यक्"
+
+
+def test_strip_reasoning_removes_thinking_block():
+    from app.services.ai_text import strip_reasoning
+
+    raw = "<thinking>reasoning here</thinking>\nFinal answer text"
+    assert strip_reasoning(raw) == "Final answer text"
+
+
+def test_strip_reasoning_passthrough_when_no_reasoning_block():
+    from app.services.ai_text import strip_reasoning
+
+    assert strip_reasoning("  plain extracted text  ") == "plain extracted text"
