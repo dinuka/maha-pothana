@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
 
+from app.models.build_status import BuildStatus, VersionStatus
+
 
 class PageOrderItem(BaseModel):
     pageId: str
@@ -166,13 +168,15 @@ class BuildListResponse(BaseModel):
 class VersionListItem(BaseModel):
     versionNumber: int
     label: str | None = None
-    status: str
+    status: VersionStatus
     buildId: str | None = None
     changelog: str | None = None
     createdBy: dict | None = None
     totalSections: int | None = None
     approvedSections: int | None = None
     createdAt: datetime | None = None
+    hasMarkdown: bool = False
+    hasHtml: bool = False
 
 
 class VersionListResponse(BaseModel):
@@ -189,7 +193,7 @@ class CreateVersionResponse(BaseModel):
     bookId: str
     label: str | None = None
     changelog: str | None = None
-    status: str = "DRAFT"
+    status: VersionStatus = VersionStatus.DRAFT
     fileKey: str | None = None
     createdBy: str | None = None
     createdAt: datetime | None = None

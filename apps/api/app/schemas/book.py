@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 
+from app.models.book_status import BookStatus
 from app.schemas.refs import OwnerRef
 
 
@@ -23,7 +24,7 @@ class BookResponse(BaseModel):
     thumbnailKey: str | None = None
     translatorCount: int = 1
     owner: OwnerRef
-    status: str = "UPLOADING"
+    status: BookStatus = BookStatus.UPLOADING
     createdAt: datetime | None = None
     updatedAt: datetime | None = None
 
@@ -49,7 +50,7 @@ class BookListItem(BaseModel):
     author: str
     sourceLanguage: str
     translateLanguages: list[str]
-    status: str
+    status: BookStatus
     thumbnailKey: str | None = None
     pageCount: int = 0
     stats: BookStatsSummary = BookStatsSummary()

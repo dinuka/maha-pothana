@@ -7,3 +7,22 @@ export enum PageStatus {
   TRANSLATED = "TRANSLATED",
   FINALIZED = "FINALIZED",
 }
+
+export enum BuildStatus {
+  NONE = "NONE",
+  BUILDING = "BUILDING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+  CANCELLED = "CANCELLED",
+}
+
+export enum VersionStatus {
+  DRAFT = "DRAFT",
+  FINALIZED = "FINALIZED",
+  ARCHIVED = "ARCHIVED",
+}
+
+export enum BookStatus {
+  UPLOADING = "UPLOADING",
+  READY = "READY",
+}
