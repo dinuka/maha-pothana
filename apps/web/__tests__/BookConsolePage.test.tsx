@@ -47,10 +47,16 @@ describe("BookConsolePage", () => {
       if (url.includes("/api/auth/token")) {
         return Promise.resolve(jsonResponse({ token: "tok" }))
       }
+      if (url.includes("/versions")) {
+        return Promise.resolve(jsonResponse({ versions: [] }))
+      }
       if (url.includes(`${"http://localhost:8000"}/api/books/book-1`) && !url.includes("/pages")) {
         return Promise.resolve(jsonResponse(bookResponse))
       }
-      return Promise.resolve(jsonResponse(pagesResponse(0, 35, 40)))
+      const parsed = new URL(url, "http://localhost")
+      const skip = Number(parsed.searchParams.get("skip") ?? 0)
+      const limit = Number(parsed.searchParams.get("limit") ?? 35)
+      return Promise.resolve(jsonResponse(pagesResponse(skip, limit, 40)))
     })
     globalThis.fetch = fetchMock
   })

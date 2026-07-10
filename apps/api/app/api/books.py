@@ -8,6 +8,8 @@ import re
 
 from app.db.client import get_db
 from app.models.page_status import PageStatus
+from app.models.build_status import BuildStatus, VersionStatus
+from app.models.book_status import BookStatus
 from app.schemas.book import BookResponse, BookUpdate, BookListItem, BookStatsSummary
 from app.schemas.book_organization import (
     BuildProgressResponse,
@@ -52,7 +54,7 @@ async def list_books(
                 author=book["author"],
                 sourceLanguage=book["sourceLanguage"],
                 translateLanguages=book.get("translateLanguages", []),
-                status=book.get("status", "UPLOADING"),
+                status=book.get("status", BookStatus.UPLOADING),
                 thumbnailKey=book.get("thumbnailKey"),
                 pageCount=page_count,
                 stats=stats_by_book.get(book_id, BookStatsSummary()),
@@ -66,7 +68,7 @@ async def list_available_books(
     db: AsyncIOMotorDatabase = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    cursor = db.books.find({"status": "READY"}).sort("createdAt", -1)
+    cursor = db.books.find({"status": BookStatus.READY}).sort("createdAt", -1)
     books = await cursor.to_list(length=100)
     book_ids = [str(book["_id"]) for book in books]
     stats_by_book = await get_books_stats_summary_doc(db, book_ids)
@@ -81,7 +83,7 @@ async def list_available_books(
                 author=book["author"],
                 sourceLanguage=book["sourceLanguage"],
                 translateLanguages=book.get("translateLanguages", []),
-                status=book.get("status", "UPLOADING"),
+                status=book.get("status", BookStatus.UPLOADING),
                 thumbnailKey=book.get("thumbnailKey"),
                 pageCount=page_count,
                 stats=stats_by_book.get(book_id, BookStatsSummary()),
@@ -119,7 +121,7 @@ async def create_book(
         "thumbnailKey": None,
         "translatorCount": 1,
         "owner": {"id": user_id},
-        "status": "UPLOADING",
+        "status": BookStatus.UPLOADING,
         "createdAt": datetime.now(timezone.utc),
         "updatedAt": datetime.now(timezone.utc),
     }
@@ -143,7 +145,7 @@ async def create_book(
         description=description,
         fileKey=file_key,
         owner=OwnerRef(id=user_id),
-        status="UPLOADING",
+        status=BookStatus.UPLOADING,
         createdAt=book_doc["createdAt"],
     )
 
@@ -166,7 +168,7 @@ async def get_book(book_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
         thumbnailKey=book.get("thumbnailKey"),
         translatorCount=book.get("translatorCount", 1),
         owner=OwnerRef(id=book["owner"]["id"]),
-        status=book.get("status", "UPLOADING"),
+        status=book.get("status", BookStatus.UPLOADING),
         createdAt=book.get("createdAt"),
         updatedAt=book.get("updatedAt"),
     )
@@ -221,7 +223,7 @@ async def trigger_build(
     # Check if a build is already in progress
     active_build = await db.book_builds.find_one({
         "book.id": book_id,
-        "status": "BUILDING",
+        "status": BuildStatus.BUILDING,
     })
     if active_build:
         raise HTTPException(409, "A build is already in progress")
@@ -251,10 +253,12 @@ async def trigger_build(
         "bookId": book_id,
         "versionNumber": version_number,
         "label": f"v{version_number}",
-        "status": "DRAFT",
+        "status": VersionStatus.DRAFT,
         "buildId": None,
         "changelog": None,
         "fileKey": None,
+        "htmlFileKey": None,
+        "markdownFileKey": None,
         "createdBy": user_id,
         "totalSections": 0,
         "approvedSections": 0,
@@ -266,7 +270,7 @@ async def trigger_build(
     build_result = await db.book_builds.insert_one({
         "book": {"id": book_id},
         "versionNumber": version_number,
-        "status": "BUILDING",
+        "status": BuildStatus.BUILDING,
         "currentPage": 0,
         "totalPages": total_pages,
         "fileKey": None,
@@ -291,7 +295,7 @@ async def trigger_build(
     logger.info("trigger_build book_id=%s version=%s build_id=%s", book_id, version_number, build_id)
     build_book_task.delay(book_id, build_id)
 
-    return {"status": "BUILDING", "versionNumber": version_number, "buildId": build_id}
+    return {"status": BuildStatus.BUILDING, "versionNumber": version_number, "buildId": build_id}
 
 
 @router.get("/api/books/{book_id}/builds/latest")
@@ -340,7 +344,7 @@ async def cancel_build(
     """Cancel the current active build."""
     active_build = await db.book_builds.find_one({
         "book.id": book_id,
-        "status": "BUILDING",
+        "status": BuildStatus.BUILDING,
     })
     if not active_build:
         raise HTTPException(400, "No active build to cancel")
@@ -359,7 +363,7 @@ async def cancel_build(
         {"_id": ObjectId(build_id)},
         {
             "$set": {
-                "status": "CANCELLED",
+                "status": BuildStatus.CANCELLED,
                 "errorMessage": "Cancelled by user",
                 "updatedAt": now,
                 "failedAt": now,
@@ -372,7 +376,7 @@ async def cancel_build(
     if version_num:
         await db.book_versions.update_one(
             {"bookId": book_id, "versionNumber": version_num},
-            {"$set": {"status": "ARCHIVED", "updatedAt": now}},
+            {"$set": {"status": VersionStatus.ARCHIVED, "updatedAt": now}},
         )
 
     return CancelBuildResponse(success=True, message="Build cancelled successfully")
@@ -443,13 +447,15 @@ async def list_versions(
             VersionListItem(
                 versionNumber=v["versionNumber"],
                 label=v.get("label"),
-                status=v.get("status", "DRAFT"),
+                status=v.get("status", VersionStatus.DRAFT),
                 buildId=v.get("buildId"),
                 changelog=v.get("changelog"),
                 createdBy=creator,
                 totalSections=v.get("totalSections"),
                 approvedSections=v.get("approvedSections"),
                 createdAt=v.get("createdAt"),
+                hasMarkdown=bool(v.get("markdownFileKey")),
+                hasHtml=bool(v.get("htmlFileKey")),
             )
         )
 
@@ -479,10 +485,12 @@ async def create_manual_version(
         "bookId": book_id,
         "versionNumber": version_number,
         "label": body.label,
-        "status": "DRAFT",
+        "status": VersionStatus.DRAFT,
         "buildId": None,
         "changelog": body.changelog,
         "fileKey": None,
+        "htmlFileKey": None,
+        "markdownFileKey": None,
         "createdBy": user_id,
         "totalSections": 0,
         "approvedSections": 0,
@@ -495,7 +503,7 @@ async def create_manual_version(
         bookId=book_id,
         label=body.label,
         changelog=body.changelog,
-        status="DRAFT",
+        status=VersionStatus.DRAFT,
         fileKey=None,
         createdBy=user_id,
         createdAt=now,
@@ -531,6 +539,84 @@ async def download_version(
     title = book.get("title", "book")
     safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '-')
     filename = f"{safe_title}-v{version_number}.pdf"
+
+    now = datetime.now(timezone.utc)
+    expires_at = datetime.fromtimestamp(now.timestamp() + 3600, tz=timezone.utc)
+
+    return DownloadResponse(
+        downloadUrl=download_url,
+        filename=filename,
+        expiresAt=expires_at,
+        versionNumber=version_number,
+    )
+
+
+@router.get("/api/books/{book_id}/versions/{version_number}/download-markdown")
+async def download_version_markdown(
+    book_id: str,
+    version_number: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    """Get a presigned download URL for a version's Markdown file."""
+    version = await db.book_versions.find_one({
+        "bookId": book_id,
+        "versionNumber": version_number,
+    })
+    if not version:
+        raise HTTPException(404, "Version not found")
+
+    if not version.get("markdownFileKey"):
+        raise HTTPException(403, "This version has no downloadable Markdown file")
+
+    book = await db.books.find_one({"_id": ObjectId(book_id)})
+    if not book:
+        raise HTTPException(404, "Book not found")
+
+    download_url = await get_presigned_url(version["markdownFileKey"], expires=3600)
+
+    title = book.get("title", "book")
+    safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '-')
+    filename = f"{safe_title}-v{version_number}.md"
+
+    now = datetime.now(timezone.utc)
+    expires_at = datetime.fromtimestamp(now.timestamp() + 3600, tz=timezone.utc)
+
+    return DownloadResponse(
+        downloadUrl=download_url,
+        filename=filename,
+        expiresAt=expires_at,
+        versionNumber=version_number,
+    )
+
+
+@router.get("/api/books/{book_id}/versions/{version_number}/download-html")
+async def download_version_html(
+    book_id: str,
+    version_number: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    """Get a presigned download URL for a version's HTML file."""
+    version = await db.book_versions.find_one({
+        "bookId": book_id,
+        "versionNumber": version_number,
+    })
+    if not version:
+        raise HTTPException(404, "Version not found")
+
+    if not version.get("htmlFileKey"):
+        raise HTTPException(403, "This version has no downloadable HTML file")
+
+    book = await db.books.find_one({"_id": ObjectId(book_id)})
+    if not book:
+        raise HTTPException(404, "Book not found")
+
+    download_url = await get_presigned_url(version["htmlFileKey"], expires=3600)
+
+    title = book.get("title", "book")
+    safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '-')
+    filename = f"{safe_title}-v{version_number}.html"
 
     now = datetime.now(timezone.utc)
     expires_at = datetime.fromtimestamp(now.timestamp() + 3600, tz=timezone.utc)

@@ -1,4 +1,5 @@
 import { apiFetchBrowser } from "@/lib/apiClientBrowser"
+import { BuildStatus, VersionStatus } from "@/lib/types"
 
 // ── Translation Review ────────────────────────────────────────────────────────
 
@@ -153,7 +154,7 @@ export const getPageHistory = async (pageId: string): Promise<PageHistoryRespons
 // ── Build & Versioning ────────────────────────────────────────────────────────
 
 export interface TriggerBuildResponse {
-  status: string
+  status: BuildStatus
   versionNumber: number
   buildId: string
 }
@@ -172,7 +173,7 @@ export const triggerBuild = async (bookId: string): Promise<TriggerBuildResponse
 export interface BuildProgress {
   id?: string
   bookId?: string
-  status: string
+  status: BuildStatus
   versionNumber?: number
   currentPage?: number
   totalPages?: number
@@ -212,7 +213,7 @@ export const cancelBuild = async (
 export interface BuildListItem {
   id: string
   versionNumber: number
-  status: string
+  status: BuildStatus
   totalSections?: number
   approvedSections?: number
   buildDurationMs?: number
@@ -245,13 +246,15 @@ export const getBuilds = async (
 export interface VersionListItem {
   versionNumber: number
   label?: string
-  status: string
+  status: VersionStatus
   buildId?: string
   changelog?: string
   createdBy?: { id: string; name: string } | null
   totalSections?: number
   approvedSections?: number
   createdAt?: string
+  hasMarkdown: boolean
+  hasHtml: boolean
 }
 
 export interface VersionListResponse {
@@ -280,6 +283,30 @@ export const getDownloadUrl = async (
   const res = await apiFetchBrowser(`/api/books/${bookId}/versions/${versionNumber}/download`)
   if (!res.ok) {
     throw new Error(`Failed to fetch download URL (${res.status})`)
+  }
+  return res.json()
+}
+
+export const getMarkdownDownloadUrl = async (
+  bookId: string,
+  versionNumber: number,
+): Promise<DownloadResponse> => {
+  const res = await apiFetchBrowser(
+    `/api/books/${bookId}/versions/${versionNumber}/download-markdown`,
+  )
+  if (!res.ok) {
+    throw new Error(`Failed to fetch markdown download URL (${res.status})`)
+  }
+  return res.json()
+}
+
+export const getHtmlDownloadUrl = async (
+  bookId: string,
+  versionNumber: number,
+): Promise<DownloadResponse> => {
+  const res = await apiFetchBrowser(`/api/books/${bookId}/versions/${versionNumber}/download-html`)
+  if (!res.ok) {
+    throw new Error(`Failed to fetch HTML download URL (${res.status})`)
   }
   return res.json()
 }

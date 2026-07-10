@@ -5,7 +5,7 @@ import logging
 import jwt
 
 from app.config import settings
-from app.db.client import connect_db, close_db, get_db
+from app.db.client import connect_db, close_db
 from app.db.indexes import ensure_indexes
 from app.api import auth, books, pages, sections, users
 from app.api.books_stats import router as books_stats_router

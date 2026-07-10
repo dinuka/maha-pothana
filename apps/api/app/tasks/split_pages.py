@@ -1,6 +1,7 @@
 from app.tasks.celery_app import celery_app
 from app.config import settings
 from app.models.page_status import PageStatus
+from app.models.book_status import BookStatus
 from app.services.s3 import get_s3, upload_file
 from app.services.pdf import (
     extract_page_count,
@@ -71,7 +72,7 @@ async def _split_pages(book_id: str):
             })
             logger.info("split_pages book_id=%s page=%d uploaded key=%s size=%dx%d", book_id, i + 1, page_key, width, height)
 
-        await db.books.update_one({"_id": ObjectId(book_id)}, {"$set": {"status": "READY"}})
+        await db.books.update_one({"_id": ObjectId(book_id)}, {"$set": {"status": BookStatus.READY}})
         logger.info("split_pages book_id=%s completed pages=%d status=READY", book_id, page_count)
         return {"book_id": book_id, "pages": page_count}
 
