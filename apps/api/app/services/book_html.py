@@ -64,30 +64,22 @@ def build_book_html(book_title: str, sections_by_page: list[tuple[int, "list[Sec
 
     body_parts = [f'<h1 class="font-latin">{_escape(book_title)}</h1>']
 
-    for page_number, sections in sections_by_page:
-        if not sections:
-            continue
+    sections: list[SectionContent] = [content for _, page_sections in sections_by_page for content in page_sections]
 
-        body_parts.append(f'<h2 class="font-latin">Page {page_number}</h2>')
+    body_parts.append('<h2 class="font-latin">Source Text</h2>')
+    for content in sections:
+        if content.source_text:
+            body_parts.append(f'<div class="text-block">{_text_to_html(content.source_text)}</div>')
 
-        for content in sections:
-            body_parts.append('<div class="section">')
+    body_parts.append('<h2 class="font-latin">Exact Letter Transliteration</h2>')
+    for content in sections:
+        if content.exact_letter_transliteration:
+            body_parts.append(f'<div class="text-block">{_text_to_html(content.exact_letter_transliteration)}</div>')
 
-            if content.source_text:
-                body_parts.append('<div class="label">Source Text</div>')
-                body_parts.append(f'<div class="text-block">{_text_to_html(content.source_text)}</div>')
-
-            if content.exact_letter_transliteration:
-                body_parts.append('<div class="label">Exact Letter Transliteration</div>')
-                body_parts.append(
-                    f'<div class="text-block">{_text_to_html(content.exact_letter_transliteration)}</div>'
-                )
-
-            if content.is_approved and content.translated_text:
-                body_parts.append('<div class="label">Translation</div>')
-                body_parts.append(f'<div class="text-block">{_text_to_html(content.translated_text)}</div>')
-
-            body_parts.append("</div>")
+    body_parts.append('<h2 class="font-latin">Translation</h2>')
+    for content in sections:
+        if content.is_approved and content.translated_text:
+            body_parts.append(f'<div class="text-block">{_text_to_html(content.translated_text)}</div>')
 
     body = "\n".join(body_parts)
 
@@ -123,14 +115,8 @@ h2 {{
   margin: 22px 0 12px 0;
 }}
 
-.section {{
+.text-block {{
   margin-bottom: 12px;
-}}
-
-.label {{
-  font-size: 9pt;
-  color: #666;
-  margin-top: 10px;
 }}
 
 .text-block .line {{

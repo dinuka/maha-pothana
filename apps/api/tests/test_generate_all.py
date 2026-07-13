@@ -1,4 +1,7 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
+from pymongo.errors import DuplicateKeyError
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.ai_text import AITextResult, TransliterationResult
@@ -6,12 +9,44 @@ from app.services.translate import VerseAnalysis
 from app.tasks.generate_section_all import _generate_section_all
 
 
+def _wire_fake_generation_runs_upsert(mock_db, section_id: str, initial: dict | None):
+    """Simulates real Mongo semantics for the claim upsert in trigger_generate_all:
+    matches the claim_filter's $or clauses against the current doc; on no match,
+    raises DuplicateKeyError (mirroring the unique index on sectionId) instead of
+    silently inserting a second doc. This exercises the actual filter logic rather
+    than just mocking which branch the endpoint should take."""
+    state: dict = dict(initial) if initial is not None else None
+
+    async def fake_find_one_and_update(claim_filter, update, upsert=False):
+        nonlocal state
+        if state is not None:
+            claimable = claim_filter["$or"][0]["status"]["$in"]
+            stale_clause = claim_filter["$or"][1]
+            stale_cutoff = stale_clause["updatedAt"]["$lt"]
+            is_stale = (
+                state.get("status") in stale_clause["status"]["$in"]
+                and state.get("updatedAt", datetime.now(timezone.utc)) < stale_cutoff
+            )
+            matches = state.get("status") in claimable or is_stale
+            if not matches:
+                raise DuplicateKeyError("E11000 duplicate key error")
+        state = {**(state or {}), **update["$set"]}
+        if "sectionId" not in state:
+            state["sectionId"] = section_id
+        return state
+
+    async def fake_find_one(_filter):
+        return dict(state) if state is not None else None
+
+    mock_db.generation_runs.find_one_and_update = AsyncMock(side_effect=fake_find_one_and_update)
+    mock_db.generation_runs.find_one = AsyncMock(side_effect=fake_find_one)
+
+
 @pytest.mark.asyncio
 async def test_trigger_generate_all_dispatches_task(client, mock_db, sample_section):
     section = {**sample_section, "croppedImageKey": "books/x/sections/1.png"}
     mock_db.sections.find_one = AsyncMock(return_value=section)
-    mock_db.generation_runs.find_one = AsyncMock(return_value=None)
-    mock_db.generation_runs.update_one = AsyncMock()
+    _wire_fake_generation_runs_upsert(mock_db, section["_id"], initial=None)
 
     mock_task = MagicMock()
     mock_task.id = "task-123"
@@ -26,7 +61,6 @@ async def test_trigger_generate_all_dispatches_task(client, mock_db, sample_sect
     data = response.json()
     assert data["status"] == "queued"
     assert data["taskId"] == "task-123"
-    mock_db.generation_runs.update_one.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -60,7 +94,9 @@ async def test_trigger_generate_all_already_completed_skips_unless_forced(
 ):
     section = {**sample_section, "croppedImageKey": "books/x/sections/1.png"}
     mock_db.sections.find_one = AsyncMock(return_value=section)
-    mock_db.generation_runs.find_one = AsyncMock(return_value={"sectionId": section["_id"], "status": "completed"})
+    _wire_fake_generation_runs_upsert(
+        mock_db, section["_id"], initial={"sectionId": section["_id"], "status": "completed"}
+    )
 
     response = await client.post(
         f'/api/sections/{section["_id"]}/generate-all',
@@ -74,8 +110,9 @@ async def test_trigger_generate_all_already_completed_skips_unless_forced(
 async def test_trigger_generate_all_force_reruns_completed(client, mock_db, sample_section):
     section = {**sample_section, "croppedImageKey": "books/x/sections/1.png"}
     mock_db.sections.find_one = AsyncMock(return_value=section)
-    mock_db.generation_runs.find_one = AsyncMock(return_value={"sectionId": section["_id"], "status": "completed"})
-    mock_db.generation_runs.update_one = AsyncMock()
+    _wire_fake_generation_runs_upsert(
+        mock_db, section["_id"], initial={"sectionId": section["_id"], "status": "completed"}
+    )
 
     mock_task = MagicMock()
     mock_task.id = "task-456"
@@ -88,6 +125,118 @@ async def test_trigger_generate_all_force_reruns_completed(client, mock_db, samp
 
     assert response.status_code == 202
     assert response.json()["taskId"] == "task-456"
+
+
+@pytest.mark.asyncio
+async def test_trigger_generate_all_processing_run_returns_202_no_dispatch(
+    client, mock_db, sample_section
+):
+    section = {**sample_section, "croppedImageKey": "books/x/sections/1.png"}
+    mock_db.sections.find_one = AsyncMock(return_value=section)
+    _wire_fake_generation_runs_upsert(
+        mock_db,
+        section["_id"],
+        initial={
+            "sectionId": section["_id"],
+            "status": "processing",
+            "updatedAt": datetime.now(timezone.utc),
+        },
+    )
+
+    with patch("app.tasks.generate_section_all.generate_section_all.delay") as mock_delay:
+        response = await client.post(
+            f'/api/sections/{section["_id"]}/generate-all',
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "processing"
+    mock_delay.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_trigger_generate_all_stale_processing_run_dispatches(
+    client, mock_db, sample_section
+):
+    section = {**sample_section, "croppedImageKey": "books/x/sections/1.png"}
+    mock_db.sections.find_one = AsyncMock(return_value=section)
+    _wire_fake_generation_runs_upsert(
+        mock_db,
+        section["_id"],
+        initial={
+            "sectionId": section["_id"],
+            "status": "processing",
+            "updatedAt": datetime.now(timezone.utc) - timedelta(seconds=601),
+        },
+    )
+
+    mock_task = MagicMock()
+    mock_task.id = "task-789"
+
+    with patch("app.tasks.generate_section_all.generate_section_all.delay", return_value=mock_task):
+        response = await client.post(
+            f'/api/sections/{section["_id"]}/generate-all',
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 202
+    assert response.json()["taskId"] == "task-789"
+
+
+@pytest.mark.asyncio
+async def test_trigger_generate_all_force_does_not_reclaim_live_run(
+    client, mock_db, sample_section
+):
+    section = {**sample_section, "croppedImageKey": "books/x/sections/1.png"}
+    mock_db.sections.find_one = AsyncMock(return_value=section)
+    _wire_fake_generation_runs_upsert(
+        mock_db,
+        section["_id"],
+        initial={
+            "sectionId": section["_id"],
+            "status": "processing",
+            "updatedAt": datetime.now(timezone.utc),
+        },
+    )
+
+    with patch("app.tasks.generate_section_all.generate_section_all.delay") as mock_delay:
+        response = await client.post(
+            f'/api/sections/{section["_id"]}/generate-all?force=true',
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "processing"
+    mock_delay.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_trigger_generate_all_fresh_processing_run_not_dispatched_even_though_marginally_old(
+    client, mock_db, sample_section
+):
+    """Guards against a regression flipping $lt to $gt in the staleness clause:
+    a processing run just under the staleness cutoff must still block dispatch."""
+    section = {**sample_section, "croppedImageKey": "books/x/sections/1.png"}
+    mock_db.sections.find_one = AsyncMock(return_value=section)
+    _wire_fake_generation_runs_upsert(
+        mock_db,
+        section["_id"],
+        initial={
+            "sectionId": section["_id"],
+            "status": "processing",
+            "updatedAt": datetime.now(timezone.utc) - timedelta(seconds=599),
+        },
+    )
+
+    with patch("app.tasks.generate_section_all.generate_section_all.delay") as mock_delay:
+        response = await client.post(
+            f'/api/sections/{section["_id"]}/generate-all',
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "processing"
+    mock_delay.assert_not_called()
 
 
 @pytest.mark.asyncio

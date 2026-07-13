@@ -35,33 +35,27 @@ def build_book_markdown(book_title: str, sections_by_page: list[tuple[int, list[
     """Plain-text Markdown rendering of the same content as build_book_html."""
     lines = [f"# {book_title}", ""]
 
-    for page_number, sections in sections_by_page:
-        if not sections:
-            continue
+    sections: list[SectionContent] = [content for _, page_sections in sections_by_page for content in page_sections]
 
-        lines.append(f"## Page {page_number}")
-        lines.append("")
+    lines.append("## Source Text")
+    lines.append("")
+    for content in sections:
+        if content.source_text:
+            lines.append(content.source_text)
+            lines.append("")
 
-        for content in sections:
-            if content.source_text:
-                lines.append("**Source Text**")
-                lines.append("")
-                lines.append(content.source_text)
-                lines.append("")
+    lines.append("## Exact Letter Transliteration")
+    lines.append("")
+    for content in sections:
+        if content.exact_letter_transliteration:
+            lines.append(content.exact_letter_transliteration)
+            lines.append("")
 
-            if content.exact_letter_transliteration:
-                lines.append("**Exact Letter Transliteration**")
-                lines.append("")
-                lines.append(content.exact_letter_transliteration)
-                lines.append("")
-
-            if content.is_approved and content.translated_text:
-                lines.append("**Translation**")
-                lines.append("")
-                lines.append(content.translated_text)
-                lines.append("")
-
-            lines.append("---")
+    lines.append("## Translation")
+    lines.append("")
+    for content in sections:
+        if content.is_approved and content.translated_text:
+            lines.append(content.translated_text)
             lines.append("")
 
     return "\n".join(lines)

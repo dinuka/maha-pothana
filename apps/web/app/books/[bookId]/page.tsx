@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import { publicEnv } from "@/lib/env/publicEnv"
-import { PageStatus, BuildStatus, VersionStatus, BookStatus } from "@/lib/types"
+import { PageStatus, ReviewStatus, BuildStatus, VersionStatus, BookStatus } from "@/lib/types"
+import { REVIEW_STATUS_ORDER, REVIEW_STATUS_TITLES } from "@/lib/reviewStatus"
 import {
   reorderPages,
   addBlankPage,
@@ -26,6 +27,7 @@ interface Page {
   pageNumber: number
   originalPageNumber?: string
   status: PageStatus
+  reviewStatus?: ReviewStatus
   thumbnailUrl?: string | null
   sectionCount?: number
   translatedPercent?: number
@@ -70,7 +72,7 @@ async function getBook(bookId: string): Promise<BookDetail | null> {
 }
 
 interface GetPagesParams {
-  statusFilter: string
+  reviewStatusFilter: string
   sortBy: "PAGE_NUMBER" | "PROGRESS"
   skip: number
   limit: number
@@ -78,11 +80,11 @@ interface GetPagesParams {
 
 async function getPages(
   bookId: string,
-  { statusFilter, sortBy, skip, limit }: GetPagesParams,
+  { reviewStatusFilter, sortBy, skip, limit }: GetPagesParams,
 ): Promise<PageListResponse | null> {
   try {
     const query = new URLSearchParams({
-      status: statusFilter,
+      reviewStatus: reviewStatusFilter,
       sort: sortBy,
       skip: String(skip),
       limit: String(limit),
@@ -110,14 +112,14 @@ async function getPages(
 
 const isPagesReady = (bookStatus: BookStatus) => bookStatus === BookStatus.READY
 
-const STATUS_DOT_META: Record<PageStatus, { color: string; title: string }> = {
-  [PageStatus.PENDING]: { color: "var(--muted)", title: "Pending" },
-  [PageStatus.PROCESSING]: { color: "#f5a623", title: "Processing" },
-  [PageStatus.DETECTION_FAILED]: { color: "#ef4444", title: "Detection Failed" },
-  [PageStatus.SECTIONS_CONFIRMED]: { color: "var(--success)", title: "Confirmed" },
-  [PageStatus.IN_TRANSLATION]: { color: "#fbbf24", title: "In Translation" },
-  [PageStatus.TRANSLATED]: { color: "#22d3ee", title: "Translated" },
-  [PageStatus.FINALIZED]: { color: "#c084fc", title: "Finalized" },
+const REVIEW_STATUS_META: Record<ReviewStatus, { color: string; border?: string }> = {
+  [ReviewStatus.REJECTED]: { color: "#ef4444" },
+  [ReviewStatus.NOT_STARTED]: { color: "#ffffff", border: "var(--muted)" },
+  [ReviewStatus.NO_TRANSLATIONS]: { color: "#4b5563" },
+  [ReviewStatus.PARTIALLY_TRANSLATED]: { color: "#f59e0b" },
+  [ReviewStatus.FULLY_TRANSLATED]: { color: "#22d3ee" },
+  [ReviewStatus.PARTIALLY_APPROVED]: { color: "#3b82f6" },
+  [ReviewStatus.FULLY_APPROVED]: { color: "var(--success)" },
 }
 
 export default function BookConsolePage({ params }: { params: Promise<{ bookId: string }> }) {
@@ -125,7 +127,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
   const [book, setBook] = useState<BookDetail | null>(null)
   const [pages, setPages] = useState<Page[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<string>("ALL")
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<string>("ALL")
   const [sortBy, setSortBy] = useState<"PAGE_NUMBER" | "PROGRESS">("PAGE_NUMBER")
   const [skip, setSkip] = useState(0)
   const [hasMore, setHasMore] = useState(true)
@@ -183,7 +185,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
         setBook(b)
         if (isPagesReady(b.status)) {
           const p = await getPages(bookId!, {
-            statusFilter,
+            reviewStatusFilter,
             sortBy,
             skip: 0,
             limit: FIRST_BATCH_SIZE,
@@ -225,14 +227,14 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
       cancelled = true
       if (pollTimer) clearTimeout(pollTimer)
     }
-  }, [bookId, statusFilter, sortBy])
+  }, [bookId, reviewStatusFilter, sortBy])
 
   const loadMore = useCallback(async () => {
     if (!bookId || !hasMoreRef.current || loadingMoreRef.current) return
     loadingMoreRef.current = true
     setLoadingMore(true)
     const p = await getPages(bookId, {
-      statusFilter,
+      reviewStatusFilter,
       sortBy,
       skip: skipRef.current,
       limit: NEXT_BATCH_SIZE,
@@ -248,7 +250,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
     }
     loadingMoreRef.current = false
     setLoadingMore(false)
-  }, [bookId, statusFilter, sortBy])
+  }, [bookId, reviewStatusFilter, sortBy])
 
   useEffect(() => {
     if (!book || !isPagesReady(book.status)) return
@@ -311,7 +313,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
     } catch {
       // Revert on failure: refetch
       const p = await getPages(bookId, {
-        statusFilter,
+        reviewStatusFilter,
         sortBy,
         skip: 0,
         limit: FIRST_BATCH_SIZE,
@@ -336,7 +338,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
       setPages(newPages)
     } catch {
       const p = await getPages(bookId, {
-        statusFilter,
+        reviewStatusFilter,
         sortBy,
         skip: 0,
         limit: FIRST_BATCH_SIZE,
@@ -355,7 +357,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
       await addBlankPage(bookId, insertAfterOrder)
       // Refetch
       const p = await getPages(bookId, {
-        statusFilter,
+        reviewStatusFilter,
         sortBy,
         skip: 0,
         limit: FIRST_BATCH_SIZE,
@@ -378,7 +380,7 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
       await deletePage(pageId)
       // Refetch
       const p = await getPages(bookId!, {
-        statusFilter,
+        reviewStatusFilter,
         sortBy,
         skip: 0,
         limit: FIRST_BATCH_SIZE,
@@ -540,13 +542,15 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
             <div style={styles.controls}>
               <select
                 style={styles.filter}
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                value={reviewStatusFilter}
+                onChange={(e) => setReviewStatusFilter(e.target.value)}
               >
                 <option value="ALL">All Pages</option>
-                <option value="completed">Completed</option>
-                <option value="in_progress">In Progress</option>
-                <option value="not_started">Not Started</option>
+                {REVIEW_STATUS_ORDER.map((status) => (
+                  <option key={status} value={status}>
+                    {REVIEW_STATUS_TITLES[status]}
+                  </option>
+                ))}
               </select>
               <select
                 style={styles.filter}
@@ -574,13 +578,16 @@ export default function BookConsolePage({ params }: { params: Promise<{ bookId: 
                       ) : (
                         <div style={styles.thumbnailPlaceholder} />
                       )}
-                      <span
-                        style={{
-                          ...styles.statusDot,
-                          background: STATUS_DOT_META[page.status].color,
-                        }}
-                        title={STATUS_DOT_META[page.status].title}
-                      />
+                      {page.reviewStatus && (
+                        <span
+                          style={{
+                            ...styles.statusDot,
+                            background: REVIEW_STATUS_META[page.reviewStatus].color,
+                            border: `2.5px solid ${REVIEW_STATUS_META[page.reviewStatus].border ?? "var(--background)"}`,
+                          }}
+                          title={REVIEW_STATUS_TITLES[page.reviewStatus]}
+                        />
+                      )}
                     </div>
                     <div style={styles.pageNum}>{page.originalPageNumber || page.pageNumber}</div>
                   </Link>

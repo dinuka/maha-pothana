@@ -1,24 +1,90 @@
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 
-import httpx
-
 from app.config import settings
 from app.services.ai_text import strip_reasoning
+from app.services.model_usage import log_model_usage
+from app.services.openrouter import call_openrouter
 
 logger = logging.getLogger(__name__)
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 TRANSLATION_MODELS = settings.openrouter_translation_models
 TRANSLATION_TIMEOUT = 60
 ANALYSIS_TIMEOUT = 90
 
+DEVANAGARI_RE = re.compile(r"[ऀ-ॿ]")
+SINHALA_RE = re.compile(r"[඀-෿]")
+LATIN_RE = re.compile(r"[A-Za-zÀ-ɏḀ-ỿ]")
+PAREN_RE = re.compile(r"\(([^()]*)\)")
 
-async def auto_translate(text: str, source_lang: str = "auto", target_lang: str = "en") -> str | None:
-    api_key = settings.openrouter_api_key
-    if not api_key:
+VERSE_WORD_HEADER = "සංස්කෘත වචනය"
+VERSE_MEANING_HEADER = "අර්ථය"
+
+
+def _parse_markdown_table(markdown: str) -> tuple[list[str], list[list[str]]] | None:
+    lines = [line.strip() for line in markdown.strip().split("\n") if line.strip()]
+    if len(lines) < 2:
+        return None
+
+    def split_row(line: str) -> list[str]:
+        return [cell.strip() for cell in line.strip("|").split("|")]
+
+    headers = split_row(lines[0])
+    rows = [split_row(line) for line in lines[2:]]
+    return headers, rows
+
+
+def _is_valid_verse_table(markdown: str) -> bool:
+    parsed = _parse_markdown_table(markdown)
+    if parsed is None:
+        return False
+    headers, rows = parsed
+
+    if len(headers) != 2:
+        return False
+    if headers[0] != VERSE_WORD_HEADER or headers[1] != VERSE_MEANING_HEADER:
+        return False
+    if not rows:
+        return False
+
+    for row in rows:
+        if len(row) != 2:
+            return False
+        word_cell, meaning_cell = row
+        if not word_cell or not meaning_cell:
+            return False
+        if LATIN_RE.search(word_cell) or LATIN_RE.search(meaning_cell):
+            return False
+        if not SINHALA_RE.search(meaning_cell):
+            return False
+
+        paren_match = PAREN_RE.search(word_cell)
+        if paren_match is None:
+            return False
+        devanagari_part = word_cell[: paren_match.start()].strip()
+        transliteration_part = paren_match.group(1).strip()
+        if not DEVANAGARI_RE.search(devanagari_part):
+            return False
+        if not transliteration_part or not SINHALA_RE.search(transliteration_part):
+            return False
+        if DEVANAGARI_RE.search(transliteration_part):
+            return False
+
+    return True
+
+
+async def auto_translate(
+    text: str,
+    source_lang: str = "auto",
+    target_lang: str = "en",
+    db=None,
+    section_id: str | None = None,
+    book_id: str | None = None,
+) -> str | None:
+    if not settings.openrouter_api_key:
         logger.warning("[translate] auto_translate: OpenRouter API key not configured")
         return None
 
@@ -34,11 +100,8 @@ async def auto_translate(text: str, source_lang: str = "auto", target_lang: str 
         "Output:"
     )
 
-    last_error = None
-    for model in TRANSLATION_MODELS:
-        logger.info("[translate] auto_translate: trying model=%s", model)
-
-        payload = {
+    def build_payload(model: str) -> dict:
+        return {
             "model": model,
             "messages": [
                 {"role": "system", "content": system_message},
@@ -49,59 +112,45 @@ async def auto_translate(text: str, source_lang: str = "auto", target_lang: str 
             "reasoning": {"exclude": True},
         }
 
-        try:
-            start = time.monotonic()
-            async with httpx.AsyncClient(timeout=TRANSLATION_TIMEOUT) as client:
-                resp = await client.post(
-                    f"{OPENROUTER_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                elapsed_ms = int((time.monotonic() - start) * 1000)
-                logger.info("[translate] auto_translate: model=%s status=%d in %dms", model, resp.status_code, elapsed_ms)
+    start = time.monotonic()
+    attempts: list[dict] = []
+    data, model, error = await call_openrouter(
+        TRANSLATION_MODELS, build_payload, TRANSLATION_TIMEOUT, attempts=attempts
+    )
+    elapsed_ms = int((time.monotonic() - start) * 1000)
 
-                if resp.status_code == 429:
-                    logger.warning("[translate] auto_translate: rate limited on model=%s, trying next", model)
-                    last_error = "Too many requests. Try again later."
-                    continue
+    if data is None:
+        logger.warning("[translate] auto_translate: all models failed, last_error=%s", error)
+        await log_model_usage(
+            db,
+            call_type="auto_translate",
+            section_id=section_id,
+            book_id=book_id,
+            model=model,
+            status="failed",
+            latency_ms=elapsed_ms,
+            attempts=attempts,
+            error=error,
+            input_summary={"textLength": len(text), "sourceLang": source_lang, "targetLang": target_lang},
+        )
+        return None
 
-                if resp.status_code != 200:
-                    error_text = resp.text[:500]
-                    logger.warning("[translate] auto_translate: model=%s failed with status=%d: %s", model, resp.status_code, error_text)
-                    last_error = f"Translation failed with status {resp.status_code}"
-                    continue
-
-                data = resp.json()
-
-                if "error" in data:
-                    error_msg = data["error"].get("message", "Unknown error")
-                    logger.warning("[translate] auto_translate: model=%s API error: %s, trying next", model, error_msg)
-                    last_error = error_msg
-                    continue
-
-                if "choices" not in data or not data["choices"]:
-                    logger.warning("[translate] auto_translate: model=%s returned empty choices, trying next", model)
-                    last_error = "Empty response from AI"
-                    continue
-
-            translated = strip_reasoning(data["choices"][0]["message"]["content"])
-            logger.info("[translate] auto_translate: model=%s result_len=%d", model, len(translated))
-            return translated
-
-        except httpx.TimeoutException:
-            logger.warning("[translate] auto_translate: model=%s timed out, trying next", model)
-            last_error = "AI service timed out"
-            continue
-        except Exception as e:
-            logger.warning("[translate] auto_translate: model=%s failed: %s, trying next", model, e)
-            last_error = str(e)
-            continue
-
-    logger.warning("[translate] auto_translate: all models failed, last_error=%s", last_error)
-    return None
+    translated = strip_reasoning(data["choices"][0]["message"]["content"])
+    logger.info("[translate] auto_translate: model=%s result_len=%d", model, len(translated))
+    await log_model_usage(
+        db,
+        call_type="auto_translate",
+        section_id=section_id,
+        book_id=book_id,
+        model=model,
+        status="success",
+        latency_ms=elapsed_ms,
+        attempts=attempts,
+        usage=data.get("usage"),
+        input_summary={"textLength": len(text), "sourceLang": source_lang, "targetLang": target_lang},
+        output_summary={"textLength": len(translated), "preview": translated[:200]},
+    )
+    return translated
 
 
 @dataclass
@@ -111,9 +160,14 @@ class VerseAnalysis:
     simplifiedMeaning: str
 
 
-async def analyze_verse(text: str, target_lang: str = "si") -> VerseAnalysis | None:
-    api_key = settings.openrouter_api_key
-    if not api_key:
+async def analyze_verse(
+    text: str,
+    target_lang: str = "si",
+    db=None,
+    section_id: str | None = None,
+    book_id: str | None = None,
+) -> VerseAnalysis | None:
+    if not settings.openrouter_api_key:
         logger.warning("[translate] analyze_verse: OpenRouter API key not configured")
         return None
 
@@ -122,21 +176,25 @@ async def analyze_verse(text: str, target_lang: str = "si") -> VerseAnalysis | N
         "Output strict JSON only, no markdown fences, no commentary."
     )
     prompt = (
-        f"Analyze the following Sanskrit verse (given in Devanagari and/or IAST) and respond in {target_lang}. "
+        "Analyze the following Sanskrit verse (given in Devanagari and/or IAST). "
         "Return a single JSON object with exactly these three string keys:\n"
-        '- "wordByWordMeaning": a markdown table breaking the verse into individual words/phrases, '
-        f"each with its meaning in {target_lang} (columns: Sanskrit word, meaning)\n"
+        '- "wordByWordMeaning": a markdown table breaking the verse into individual words, '
+        f'with exactly these two column headers in this order: "{VERSE_WORD_HEADER}" and "{VERSE_MEANING_HEADER}".\n'
+        f'  - "{VERSE_WORD_HEADER}" column: the word in Devanagari script, followed by its exact letter-by-letter '
+        "transliteration into Sinhala script (not IAST, not romanized Latin) in parentheses. "
+        "Examples: च (ච), राजः (රාජඃ)\n"
+        f'  - "{VERSE_MEANING_HEADER}" column: the meaning of that word, written only in Sinhala script '
+        "(no Devanagari, no Latin/English/IAST). Example: සහ\n"
+        "  - Every cell must contain only Devanagari and/or Sinhala letters — never Latin, English, or "
+        "romanized/IAST characters (e.g. never write rājaḥ, ča, or similar romanized forms).\n"
         f'- "fullMeaning": the complete, faithful meaning of the verse in {target_lang}\n'
         f'- "simplifiedMeaning": the same meaning restated in simpler, more accessible {target_lang}\n\n'
         f"Verse:\n{text}\n\n"
         "Respond with only the JSON object."
     )
 
-    last_error = None
-    for model in TRANSLATION_MODELS:
-        logger.info("[translate] analyze_verse: trying model=%s", model)
-
-        payload = {
+    def build_payload(model: str) -> dict:
+        return {
             "model": model,
             "messages": [
                 {"role": "system", "content": system_message},
@@ -148,69 +206,59 @@ async def analyze_verse(text: str, target_lang: str = "si") -> VerseAnalysis | N
             "reasoning": {"exclude": True},
         }
 
+    def validate(data: dict) -> bool:
         try:
-            start = time.monotonic()
-            async with httpx.AsyncClient(timeout=ANALYSIS_TIMEOUT) as client:
-                resp = await client.post(
-                    f"{OPENROUTER_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                elapsed_ms = int((time.monotonic() - start) * 1000)
-                logger.info("[translate] analyze_verse: model=%s status=%d in %dms", model, resp.status_code, elapsed_ms)
-
-                if resp.status_code == 429:
-                    logger.warning("[translate] analyze_verse: rate limited on model=%s, trying next", model)
-                    last_error = "Too many requests. Try again later."
-                    continue
-
-                if resp.status_code != 200:
-                    error_text = resp.text[:500]
-                    logger.warning("[translate] analyze_verse: model=%s failed with status=%d: %s", model, resp.status_code, error_text)
-                    last_error = f"Analysis failed with status {resp.status_code}"
-                    continue
-
-                data = resp.json()
-
-                if "error" in data:
-                    error_msg = data["error"].get("message", "Unknown error")
-                    logger.warning("[translate] analyze_verse: model=%s API error: %s, trying next", model, error_msg)
-                    last_error = error_msg
-                    continue
-
-                if "choices" not in data or not data["choices"]:
-                    logger.warning("[translate] analyze_verse: model=%s returned empty choices, trying next", model)
-                    last_error = "Empty response from AI"
-                    continue
-
             content = strip_reasoning(data["choices"][0]["message"]["content"])
+            parsed = json.loads(content)
+            if not all(key in parsed for key in ("wordByWordMeaning", "fullMeaning", "simplifiedMeaning")):
+                return False
+            return _is_valid_verse_table(parsed["wordByWordMeaning"])
+        except (json.JSONDecodeError, KeyError, TypeError, IndexError):
+            return False
 
-            try:
-                parsed = json.loads(content)
-                result = VerseAnalysis(
-                    wordByWordMeaning=parsed["wordByWordMeaning"],
-                    fullMeaning=parsed["fullMeaning"],
-                    simplifiedMeaning=parsed["simplifiedMeaning"],
-                )
-            except (json.JSONDecodeError, KeyError, TypeError) as e:
-                logger.warning("[translate] analyze_verse: model=%s returned unparseable JSON: %s, trying next", model, e)
-                last_error = "AI returned an unexpected response format"
-                continue
+    start = time.monotonic()
+    attempts: list[dict] = []
+    data, model, error = await call_openrouter(
+        TRANSLATION_MODELS, build_payload, ANALYSIS_TIMEOUT, validate=validate, attempts=attempts
+    )
+    elapsed_ms = int((time.monotonic() - start) * 1000)
 
-            logger.info("[translate] analyze_verse: model=%s succeeded", model)
-            return result
+    if data is None:
+        logger.warning("[translate] analyze_verse: all models failed, last_error=%s", error)
+        await log_model_usage(
+            db,
+            call_type="verse_analysis",
+            section_id=section_id,
+            book_id=book_id,
+            model=model,
+            status="failed",
+            latency_ms=elapsed_ms,
+            attempts=attempts,
+            error=error,
+            input_summary={"textLength": len(text), "targetLang": target_lang},
+        )
+        return None
 
-        except httpx.TimeoutException:
-            logger.warning("[translate] analyze_verse: model=%s timed out, trying next", model)
-            last_error = "AI service timed out"
-            continue
-        except Exception as e:
-            logger.warning("[translate] analyze_verse: model=%s failed: %s, trying next", model, e)
-            last_error = str(e)
-            continue
+    content = strip_reasoning(data["choices"][0]["message"]["content"])
+    parsed = json.loads(content)
+    result = VerseAnalysis(
+        wordByWordMeaning=parsed["wordByWordMeaning"],
+        fullMeaning=parsed["fullMeaning"],
+        simplifiedMeaning=parsed["simplifiedMeaning"],
+    )
 
-    logger.warning("[translate] analyze_verse: all models failed, last_error=%s", last_error)
-    return None
+    logger.info("[translate] analyze_verse: model=%s succeeded", model)
+    await log_model_usage(
+        db,
+        call_type="verse_analysis",
+        section_id=section_id,
+        book_id=book_id,
+        model=model,
+        status="success",
+        latency_ms=elapsed_ms,
+        attempts=attempts,
+        usage=data.get("usage"),
+        input_summary={"textLength": len(text), "targetLang": target_lang},
+        output_summary={"textLength": len(content)},
+    )
+    return result

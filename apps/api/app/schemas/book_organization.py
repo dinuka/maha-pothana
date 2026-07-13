@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.models.build_status import BuildStatus, VersionStatus
+from app.models.review_status import ReviewStatus
 
 
 class PageOrderItem(BaseModel):
@@ -46,6 +47,7 @@ class PageWithProgress(BaseModel):
     approvedSectionCount: int = 0
     translationPercent: float = 0
     computedStatus: str = "not_started"
+    reviewStatus: ReviewStatus = ReviewStatus.NOT_STARTED
 
 
 class PageListStats(BaseModel):

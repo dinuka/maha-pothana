@@ -31,18 +31,20 @@ async def _update_run(db, section_id: str, **fields):
     )
 
 
-async def _resolve_book_context(db, sec: dict) -> tuple[str, str]:
+async def _resolve_book_context(db, sec: dict) -> tuple[str | None, str, str]:
+    book_id = None
     source_script = "unknown"
     target_lang = "si"
     page = await db.pages.find_one({"_id": ObjectId(sec["page"]["id"])})
     if page and page.get("book"):
+        book_id = page["book"].get("id")
         book = await db.books.find_one({"_id": ObjectId(page["book"]["id"])})
         if book:
             source_script = book.get("sourceLanguage", "unknown")
             langs = book.get("translateLanguages", [])
             if langs:
                 target_lang = langs[0]
-    return source_script, target_lang
+    return book_id, source_script, target_lang
 
 
 async def _run_extraction(db, section_id: str, sec: dict, force: bool) -> str | None:
@@ -69,7 +71,7 @@ async def _run_extraction(db, section_id: str, sec: dict, force: bool) -> str | 
         return None
 
     try:
-        result = await extract_text(image_data, db=db)
+        result = await extract_text(image_data, db=db, section_id=section_id)
     except Exception as e:
         logger.error("[generate_section_all] extraction failed for %s: %s", section_id, e)
         await db.ai_text_extractions.update_one(
@@ -118,7 +120,8 @@ async def _run_extraction(db, section_id: str, sec: dict, force: bool) -> str | 
 
 
 async def _run_transliteration(
-    db, section_id: str, source_text: str, source_script: str, target_script: str, force: bool
+    db, section_id: str, source_text: str, source_script: str, target_script: str, force: bool,
+    book_id: str | None = None,
 ) -> str | None:
     if not force:
         cached = await db.transliterations.find_one({
@@ -138,6 +141,8 @@ async def _run_transliteration(
             source_script=source_script,
             target_script=target_script,
             db=db,
+            section_id=section_id,
+            book_id=book_id,
         )
     except Exception as e:
         logger.error("[generate_section_all] transliteration failed for %s: %s", section_id, e)
@@ -168,7 +173,10 @@ async def _run_transliteration(
     return result.transliterated_text
 
 
-async def _run_analysis(db, section_id: str, sec: dict, source_text: str, target_lang: str, force: bool) -> None:
+async def _run_analysis(
+    db, section_id: str, sec: dict, source_text: str, target_lang: str, force: bool,
+    book_id: str | None = None,
+) -> None:
     if not force and sec.get("wordByWordMeaning"):
         await _update_run(
             db, section_id,
@@ -181,7 +189,9 @@ async def _run_analysis(db, section_id: str, sec: dict, source_text: str, target
 
     await _update_run(db, section_id, analysisStatus="processing")
 
-    analysis = await analyze_verse(source_text, target_lang=target_lang)
+    analysis = await analyze_verse(
+        source_text, target_lang=target_lang, db=db, section_id=section_id, book_id=book_id,
+    )
     if analysis is None:
         await _update_run(db, section_id, analysisStatus="failed", error="Verse analysis service unavailable")
         return
@@ -223,14 +233,16 @@ async def _generate_section_all(section_id: str, target_script: str, force: bool
             await _update_run(db, section_id, status="failed")
             return {"error": "Extraction failed; cannot continue"}
 
-        source_script, target_lang = await _resolve_book_context(db, sec)
+        book_id, source_script, target_lang = await _resolve_book_context(db, sec)
 
         transliterated_text = await _run_transliteration(
-            db, section_id, source_text, source_script, target_script, force
+            db, section_id, source_text, source_script, target_script, force, book_id=book_id
         )
 
         sec_after_extraction = await db.sections.find_one({"_id": ObjectId(section_id)})
-        await _run_analysis(db, section_id, sec_after_extraction or sec, source_text, target_lang, force)
+        await _run_analysis(
+            db, section_id, sec_after_extraction or sec, source_text, target_lang, force, book_id=book_id
+        )
 
         run = await db.generation_runs.find_one({"sectionId": section_id})
         statuses = [
