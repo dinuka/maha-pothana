@@ -56,6 +56,11 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
   const [reverseTransliterating, setReverseTransliterating] = useState(false)
   const [generatingAll, setGeneratingAll] = useState(false)
   const [generateAllError, setGenerateAllError] = useState<string | null>(null)
+  const [generateAllProgress, setGenerateAllProgress] = useState<{
+    extractionStatus: string | null
+    transliterationStatus: string | null
+    analysisStatus: string | null
+  } | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [wordByWordMeaning, setWordByWordMeaning] = useState<string | null>(null)
   const [fullMeaning, setFullMeaning] = useState<string | null>(null)
@@ -176,6 +181,7 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
       setSimplifiedMeaning(data.simplifiedMeaning)
       setAnalyzeError(null)
       setGenerateAllError(null)
+      setGenerateAllProgress(null)
       resetDirty()
       fetchMyTranslation(data.id)
       fetchExtraction(data.id)
@@ -591,6 +597,11 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
     if (!section || generatingAll) return
     setGeneratingAll(true)
     setGenerateAllError(null)
+    setGenerateAllProgress({
+      extractionStatus: "queued",
+      transliterationStatus: "queued",
+      analysisStatus: "queued",
+    })
     try {
       const forceParam = force ? "&force=true" : ""
       const res = await apiFetchBrowser(
@@ -599,6 +610,7 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
       )
       if (!res.ok && res.status !== 409) {
         setGeneratingAll(false)
+        setGenerateAllProgress(null)
         setGenerateAllError(`Generation failed (${res.status})`)
         return
       }
@@ -609,6 +621,7 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
         if (attempts > 30) {
           clearInterval(poll)
           setGeneratingAll(false)
+          setGenerateAllProgress(null)
           setGenerateAllError("Generation timed out. Please try again.")
           return
         }
@@ -617,6 +630,9 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
           if (pollRes.ok) {
             const data = (await pollRes.json()) as {
               status: string
+              extractionStatus?: string | null
+              transliterationStatus?: string | null
+              analysisStatus?: string | null
               aiExtractedText?: string | null
               transliteratedText?: string | null
               wordByWordMeaning?: string | null
@@ -624,6 +640,11 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
               simplifiedMeaning?: string | null
               error?: string | null
             }
+            setGenerateAllProgress({
+              extractionStatus: data.extractionStatus ?? null,
+              transliterationStatus: data.transliterationStatus ?? null,
+              analysisStatus: data.analysisStatus ?? null,
+            })
             if (
               data.status === "completed" ||
               data.status === "partial" ||
@@ -632,6 +653,7 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
               clearInterval(poll)
               applyGenerateAllResult(data)
               setGeneratingAll(false)
+              setGenerateAllProgress(null)
               if (data.status === "failed") {
                 setGenerateAllError(data.error || "Generation failed. Please try again.")
               } else if (data.status === "partial") {
@@ -647,6 +669,7 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
       }, 2000)
     } catch {
       setGeneratingAll(false)
+      setGenerateAllProgress(null)
       setGenerateAllError("Network error. Please check your connection.")
     }
   }
@@ -777,6 +800,29 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
               </button>
             </div>
           </div>
+
+          {generatingAll && (
+            <div style={styles.generateAllProgress}>
+              <div style={styles.miniSpinner} />
+              <span>Generating:</span>
+              <GenerateAllStep
+                label="Source text"
+                status={generateAllProgress?.extractionStatus ?? null}
+              />
+              <span style={styles.progressSep}>→</span>
+              <GenerateAllStep
+                label="Exact letters"
+                status={generateAllProgress?.transliterationStatus ?? null}
+              />
+              <span style={styles.progressSep}>→</span>
+              <GenerateAllStep
+                label="Verse analysis"
+                status={generateAllProgress?.analysisStatus ?? null}
+              />
+            </div>
+          )}
+
+          {generateAllError && <div style={styles.errorPanel}>{generateAllError}</div>}
 
           <PageImageViewer bookId={section.book.id} pageNumber={section.pageNumber} />
 
@@ -943,7 +989,6 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
             <DraftSaveIndicator visible={showSavedIndicator} />
 
             {successMessage && <div style={styles.successBox}>{successMessage}</div>}
-            {generateAllError && <div style={styles.errorPanel}>{generateAllError}</div>}
           </div>
 
           {myTranslation && !myTranslation.isApproved && (
@@ -964,6 +1009,30 @@ export const TranslateTab = ({ filters, isEditor = false, onSubmitted }: Transla
         </>
       )}
     </div>
+  )
+}
+
+const STEP_ICON: Record<string, string> = {
+  queued: "○",
+  processing: "◐",
+  completed: "✓",
+  failed: "✗",
+}
+
+const STEP_COLOR: Record<string, string> = {
+  queued: "var(--muted)",
+  processing: "#3B82F6",
+  completed: "#16A34A",
+  failed: "#DC2626",
+}
+
+const GenerateAllStep = ({ label, status }: { label: string; status: string | null }) => {
+  const key = status ?? "queued"
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: STEP_COLOR[key] }}>
+      <span aria-hidden>{STEP_ICON[key] ?? "○"}</span>
+      <span>{label}</span>
+    </span>
   )
 }
 
@@ -1030,6 +1099,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
   },
   pageIndicator: {
+    color: "var(--muted)",
+  },
+  generateAllProgress: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 16px",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    background: "var(--surface)",
+    fontSize: 13,
+    color: "var(--foreground)",
+  },
+  progressSep: {
     color: "var(--muted)",
   },
   actions: {

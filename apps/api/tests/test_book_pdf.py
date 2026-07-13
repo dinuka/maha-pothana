@@ -107,7 +107,7 @@ def test_build_book_markdown_multiple_pages_in_order():
     assert md.index("Page One Content") < md.index("Page Two Content")
 
 
-def test_build_book_markdown_skips_pages_with_no_sections():
+def test_build_book_markdown_flattens_sections_across_pages():
     from app.services.book_pdf import build_book_markdown
 
     sections_p2 = [
@@ -116,4 +116,33 @@ def test_build_book_markdown_skips_pages_with_no_sections():
     md = build_book_markdown("My Book", [(1, []), (2, sections_p2)])
 
     assert "Page 1" not in md
+    assert "Page 2" not in md
     assert "Page Two Content" in md
+
+
+def test_build_book_markdown_groups_all_source_before_all_translit_before_all_translation():
+    from app.services.book_pdf import build_book_markdown
+
+    sections = [
+        SectionContent(
+            section_id="s1",
+            section_order=1,
+            source_text="Source One",
+            exact_letter_transliteration="Translit One",
+            translated_text="Translation One",
+            is_approved=True,
+        ),
+        SectionContent(
+            section_id="s2",
+            section_order=2,
+            source_text="Source Two",
+            exact_letter_transliteration="Translit Two",
+            translated_text="Translation Two",
+            is_approved=True,
+        ),
+    ]
+    md = build_book_markdown("My Book", [(1, sections)])
+
+    assert md.index("Source One") < md.index("Source Two") < md.index("Translit One")
+    assert md.index("Translit One") < md.index("Translit Two") < md.index("Translation One")
+    assert md.index("Translation One") < md.index("Translation Two")

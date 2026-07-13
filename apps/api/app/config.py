@@ -32,27 +32,53 @@ class Settings(BaseSettings):
 
     openrouter_api_key: str = ""
 
+    # Local Ollama fallback, tried only after every cloud model above is
+    # exhausted. Entries prefixed "ollama/" are routed to this base URL
+    # instead of OpenRouter (see app/services/openrouter.py). Text-only —
+    # not usable for extraction, which sends image content to a vision model.
+    ollama_base_url: str = "http://localhost:11434/v1"
+
+    # Vision-capable only: extraction sends image content, so text-only
+    # models (nemotron-3-super, gpt-oss) must not be added here — they
+    # 404 with "No endpoints found that support image input".
     openrouter_extraction_models: Annotated[list[str], NoDecode] = [
         "google/gemma-4-31b-it:free",
         "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "google/gemma-4-26b-a4b-it:free",
+        "ollama/qwen2.5:7b-instruct-q4_K_M"
     ]
     openrouter_transliteration_models: Annotated[list[str], NoDecode] = [
         "google/gemma-4-31b-it:free",
         "openai/gpt-oss-120b:free",
+        "openai/gpt-oss-20b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
         "nousresearch/hermes-3-llama-3.1-405b:free",
+        "ollama/qwen2.5:7b-instruct-q4_K_M"
     ]
     openrouter_translation_models: Annotated[list[str], NoDecode] = [
         "google/gemma-4-31b-it:free",
         "openai/gpt-oss-120b:free",
+        "openai/gpt-oss-20b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
         "nousresearch/hermes-3-llama-3.1-405b:free",
+        "ollama/qwen2.5:7b-instruct-q4_K_M"
     ]
-    openrouter_confidence_model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+    openrouter_confidence_models: Annotated[list[str], NoDecode] = [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "openai/gpt-oss-20b:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "ollama/qwen2.5:7b-instruct-q4_K_M"
+    ]
+    openrouter_model_cooldown_seconds: int = 60
+    ollama_timeout_seconds: float = 180
 
     @field_validator(
         "openrouter_extraction_models",
         "openrouter_transliteration_models",
         "openrouter_translation_models",
+        "openrouter_confidence_models",
         mode="before",
     )
     @classmethod

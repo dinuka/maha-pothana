@@ -95,14 +95,41 @@ def test_build_book_html_mixed_script_lines_use_correct_font_class():
     assert 'font-latin">Devī Māhātmyam' in html
 
 
-def test_build_book_html_skips_pages_with_no_sections():
+def test_build_book_html_flattens_sections_across_pages():
     sections_p2 = [
         SectionContent(section_id="b", section_order=1, source_text="Page Two Content", is_approved=False)
     ]
     html = build_book_html("My Book", [(1, []), (2, sections_p2)])
 
     assert "Page 1" not in html
+    assert "Page 2" not in html
     assert "Page Two Content" in html
+
+
+def test_build_book_html_groups_all_source_before_all_translit_before_all_translation():
+    sections = [
+        SectionContent(
+            section_id="s1",
+            section_order=1,
+            source_text="Source One",
+            exact_letter_transliteration="Translit One",
+            translated_text="Translation One",
+            is_approved=True,
+        ),
+        SectionContent(
+            section_id="s2",
+            section_order=2,
+            source_text="Source Two",
+            exact_letter_transliteration="Translit Two",
+            translated_text="Translation Two",
+            is_approved=True,
+        ),
+    ]
+    html = build_book_html("My Book", [(1, sections)])
+
+    assert html.index("Source One") < html.index("Source Two") < html.index("Translit One")
+    assert html.index("Translit One") < html.index("Translit Two") < html.index("Translation One")
+    assert html.index("Translation One") < html.index("Translation Two")
 
 
 def test_build_book_pdf_via_weasyprint_produces_valid_pdf():

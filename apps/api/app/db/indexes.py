@@ -56,3 +56,8 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.section_edit_history.create_index([("pageId", 1), ("timestamp", -1)])
 
     await db.generation_runs.create_index("sectionId", unique=True)
+
+    await db.model_usage.create_index([("sectionId", 1), ("createdAt", -1)])
+    await db.model_usage.create_index([("callType", 1), ("createdAt", -1)])
+    await db.model_usage.create_index([("model", 1), ("createdAt", -1)])
+    await db.model_usage.create_index("createdAt")

@@ -9,6 +9,8 @@ import {
   rejectTranslation,
   editorOverrideTranslation,
 } from "@/lib/api/bookOrganization"
+import { ReviewStatus } from "@/lib/types"
+import { REVIEW_STATUS_ORDER, REVIEW_STATUS_TITLES } from "@/lib/reviewStatus"
 
 interface SectionReview {
   id: string
@@ -34,6 +36,7 @@ interface TranslationDetail {
   translatedText: string
   exactLetterTranslation: string | null
   isApproved: boolean
+  isEditorOverride: boolean
   rejected: boolean
   approvedBy: { id: string } | null
   createdAt: string | null
@@ -51,6 +54,7 @@ interface BookDetail {
 interface PageMeta {
   id: string
   pageNumber: number
+  reviewStatus: ReviewStatus
 }
 
 interface ReviewData {
@@ -60,8 +64,19 @@ interface ReviewData {
     imageUrl: string | null
     status: string
     reviewed: boolean
+    reviewStatus?: ReviewStatus
   }
   sections: SectionReview[]
+}
+
+const REVIEW_STATUS_BADGE_META: Record<ReviewStatus, { color: string; background: string }> = {
+  [ReviewStatus.REJECTED]: { color: "#991b1b", background: "#fef2f2" },
+  [ReviewStatus.NOT_STARTED]: { color: "var(--muted)", background: "var(--surface)" },
+  [ReviewStatus.NO_TRANSLATIONS]: { color: "#374151", background: "#f3f4f6" },
+  [ReviewStatus.PARTIALLY_TRANSLATED]: { color: "#92400e", background: "#fef3c7" },
+  [ReviewStatus.FULLY_TRANSLATED]: { color: "#155e75", background: "#cffafe" },
+  [ReviewStatus.PARTIALLY_APPROVED]: { color: "#1e40af", background: "#dbeafe" },
+  [ReviewStatus.FULLY_APPROVED]: { color: "#166534", background: "#dcfce7" },
 }
 
 const parseMarkdownTable = (markdown: string): { headers: string[]; rows: string[][] } | null => {
@@ -468,6 +483,7 @@ const TranslationReviewPage = () => {
   const [book, setBook] = useState<BookDetail | null>(null)
   const [pages, setPages] = useState<PageMeta[]>([])
   const [selectedPage, setSelectedPage] = useState<number | null>(null)
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<string>("ALL")
   const [reviewData, setReviewData] = useState<ReviewData | null>(null)
   const [loading, setLoading] = useState(true)
   const [pageLoading, setPageLoading] = useState(false)
@@ -552,6 +568,18 @@ const TranslationReviewPage = () => {
       cancelled = true
     }
   }, [bookId])
+
+  const filteredPages =
+    reviewStatusFilter === "ALL"
+      ? pages
+      : pages.filter((p) => p.reviewStatus === reviewStatusFilter)
+
+  useEffect(() => {
+    if (selectedPage !== null && !filteredPages.some((p) => p.pageNumber === selectedPage)) {
+      setSelectedPage(filteredPages[0]?.pageNumber ?? null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewStatusFilter, filteredPages])
 
   useEffect(() => {
     if (selectedPage !== null) {
@@ -760,72 +788,105 @@ const TranslationReviewPage = () => {
       </div>
 
       <div style={styles.controls}>
+        <select
+          style={styles.filter}
+          value={reviewStatusFilter}
+          onChange={(e) => setReviewStatusFilter(e.target.value)}
+        >
+          <option value="ALL">All Pages</option>
+          {REVIEW_STATUS_ORDER.map((status) => (
+            <option key={status} value={status}>
+              {REVIEW_STATUS_TITLES[status]}
+            </option>
+          ))}
+        </select>
         <div style={styles.pagination}>
-          <button
-            style={{
-              ...styles.pageBtn,
-              opacity: selectedPage !== null && selectedPage > 1 ? 1 : 0.4,
-            }}
-            disabled={selectedPage === null || selectedPage <= 1}
-            onClick={() => selectedPage !== null && setSelectedPage(selectedPage - 1)}
-          >
-            ‹
-          </button>
-          {selectedPage !== null &&
-            buildPageNumbers(pages, selectedPage).map((item, i) =>
-              item === "..." ? (
-                <span key={`e${i}`} style={styles.pageEllipsis}>
-                  …
-                </span>
-              ) : (
+          {(() => {
+            const currentIndex =
+              selectedPage !== null
+                ? filteredPages.findIndex((p) => p.pageNumber === selectedPage)
+                : -1
+            const hasPrev = currentIndex > 0
+            const hasNext = currentIndex !== -1 && currentIndex < filteredPages.length - 1
+            return (
+              <>
                 <button
-                  key={item}
-                  style={{
-                    ...styles.pageBtn,
-                    ...(item === selectedPage ? styles.pageBtnActive : {}),
-                  }}
-                  onClick={() => setSelectedPage(item)}
+                  style={{ ...styles.pageBtn, opacity: hasPrev ? 1 : 0.4 }}
+                  disabled={!hasPrev}
+                  onClick={() =>
+                    hasPrev && setSelectedPage(filteredPages[currentIndex - 1]!.pageNumber)
+                  }
                 >
-                  {item}
+                  ‹
                 </button>
-              ),
-            )}
-          <button
-            style={{
-              ...styles.pageBtn,
-              opacity: selectedPage !== null && selectedPage < pages.length ? 1 : 0.4,
-            }}
-            disabled={selectedPage === null || selectedPage >= pages.length}
-            onClick={() => selectedPage !== null && setSelectedPage(selectedPage + 1)}
-          >
-            ›
-          </button>
+                {selectedPage !== null &&
+                  currentIndex !== -1 &&
+                  buildPageNumbers(filteredPages, selectedPage).map((item, i) =>
+                    item === "..." ? (
+                      <span key={`e${i}`} style={styles.pageEllipsis}>
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={item}
+                        style={{
+                          ...styles.pageBtn,
+                          ...(item === selectedPage ? styles.pageBtnActive : {}),
+                        }}
+                        onClick={() => setSelectedPage(item)}
+                      >
+                        {item}
+                      </button>
+                    ),
+                  )}
+                <button
+                  style={{ ...styles.pageBtn, opacity: hasNext ? 1 : 0.4 }}
+                  disabled={!hasNext}
+                  onClick={() =>
+                    hasNext && setSelectedPage(filteredPages[currentIndex + 1]!.pageNumber)
+                  }
+                >
+                  ›
+                </button>
+              </>
+            )
+          })()}
         </div>
       </div>
 
       {successMsg && <div style={styles.successMsg}>{successMsg}</div>}
       {actionError && <div style={styles.errorMsg}>{actionError}</div>}
 
-      {pageLoading && (
+      {filteredPages.length === 0 && (
+        <div style={styles.errorBox}>
+          <div>No pages match this filter.</div>
+        </div>
+      )}
+
+      {filteredPages.length > 0 && pageLoading && (
         <div style={styles.loading}>
           <div className="spinner" style={styles.spinner} />
           <span>Loading page...</span>
         </div>
       )}
 
-      {!pageLoading && reviewData && (
+      {filteredPages.length > 0 && !pageLoading && reviewData && (
         <>
           {reviewData.page.imageUrl && (
             <div style={styles.pageImageCard}>
               <div style={styles.imageCardHeader}>
                 <span style={styles.imageLabel}>Page {reviewData.page.pageNumber}</span>
-                <span
-                  style={
-                    reviewData.page.reviewed ? styles.reviewedBadge : styles.pendingReviewBadge
-                  }
-                >
-                  {reviewData.page.reviewed ? "✓ Page reviewed" : "Pending review"}
-                </span>
+                {reviewData.page.reviewStatus && (
+                  <span
+                    style={{
+                      ...styles.reviewStatusBadge,
+                      color: REVIEW_STATUS_BADGE_META[reviewData.page.reviewStatus].color,
+                      background: REVIEW_STATUS_BADGE_META[reviewData.page.reviewStatus].background,
+                    }}
+                  >
+                    {REVIEW_STATUS_TITLES[reviewData.page.reviewStatus]}
+                  </span>
+                )}
               </div>
               <div
                 style={{
@@ -888,16 +949,16 @@ const TranslationReviewPage = () => {
                 ) : (
                   <div style={styles.summaryList}>
                     {sections.map((sec, i) => {
-                      const approved = sec.translations.filter((t) => t.isApproved)
+                      const shown =
+                        sec.translations.find((t) => t.isEditorOverride) ??
+                        sec.translations.find((t) => t.isApproved)
                       const rejected = sec.translations.some((t) => t.rejected)
-                      const statusLabel =
-                        approved.length > 0 ? "Approved" : rejected ? "Rejected" : "Pending"
-                      const statusStyle =
-                        approved.length > 0
-                          ? styles.statusApproved
-                          : rejected
-                            ? styles.statusRejected
-                            : styles.statusPending
+                      const statusLabel = shown ? "Approved" : rejected ? "Rejected" : "Pending"
+                      const statusStyle = shown
+                        ? styles.statusApproved
+                        : rejected
+                          ? styles.statusRejected
+                          : styles.statusPending
                       return (
                         <button
                           key={sec.id}
@@ -910,12 +971,8 @@ const TranslationReviewPage = () => {
                         >
                           <span style={styles.summarySectionNum}>S{sec.sectionOrder + 1}</span>
                           <div style={styles.summaryTexts}>
-                            {approved.length > 0 ? (
-                              approved.map((t) => (
-                                <span key={t.id} style={styles.summaryTransText}>
-                                  {t.translatedText}
-                                </span>
-                              ))
+                            {shown ? (
+                              <span style={styles.summaryTransText}>{shown.translatedText}</span>
                             ) : (
                               <span style={styles.summaryTransTextMuted}>
                                 No approved translation yet
@@ -1008,22 +1065,25 @@ const TranslationReviewPage = () => {
 
 export default TranslationReviewPage
 
-function buildPageNumbers(pages: PageMeta[], current: number): (number | "...")[] {
+function buildPageNumbers(pages: PageMeta[], currentPageNumber: number): (number | "...")[] {
   const total = pages.length
   if (total <= 7) return pages.map((p) => p.pageNumber)
 
+  const currentIndex = pages.findIndex((p) => p.pageNumber === currentPageNumber)
+  if (currentIndex === -1) return pages.map((p) => p.pageNumber)
+
   const result: (number | "...")[] = []
-  result.push(1)
+  result.push(pages[0]!.pageNumber)
 
-  if (current > 3) result.push("...")
+  if (currentIndex > 3) result.push("...")
 
-  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
-    result.push(i)
+  for (let i = Math.max(1, currentIndex - 1); i <= Math.min(total - 2, currentIndex + 1); i++) {
+    result.push(pages[i]!.pageNumber)
   }
 
-  if (current < total - 2) result.push("...")
+  if (currentIndex < total - 3) result.push("...")
 
-  result.push(total)
+  result.push(pages[total - 1]!.pageNumber)
   return result
 }
 
@@ -1047,6 +1107,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   controlGroup: { display: "flex", alignItems: "center", gap: 8 },
   controlLabel: { fontSize: 13, fontWeight: 600, color: "var(--muted)" },
+  filter: {
+    padding: "8px 12px",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+    fontSize: 13,
+    background: "var(--background)",
+    color: "var(--foreground)",
+  },
   pagination: {
     display: "flex",
     alignItems: "center",
@@ -1441,21 +1509,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: "pointer",
   },
-  reviewedBadge: {
+  reviewStatusBadge: {
     fontSize: 13,
     fontWeight: 600,
-    color: "#166534",
     padding: "6px 14px",
-    background: "#dcfce7",
-    borderRadius: 6,
-  },
-  pendingReviewBadge: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "var(--muted)",
-    padding: "6px 14px",
-    background: "var(--surface)",
-    border: "1px solid var(--border)",
     borderRadius: 6,
   },
   loading: {

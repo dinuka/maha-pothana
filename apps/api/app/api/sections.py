@@ -250,7 +250,10 @@ async def auto_translate_section(
             if langs:
                 target_lang = langs[0]
 
-    translated = await auto_translate(source_text, source_lang="auto", target_lang=target_lang)
+    translated = await auto_translate(
+        source_text, source_lang="auto", target_lang=target_lang,
+        db=db, section_id=section_id, book_id=book_id,
+    )
     if translated is None:
         raise HTTPException(502, "Auto-translation service unavailable")
 
@@ -263,11 +266,7 @@ async def auto_translate_section(
 
 
 @router.post("/api/sections/{section_id}/analyze")
-async def analyze_section(
-    section_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    user_id: str = Depends(get_current_user),
-):
+async def analyze_section(section_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     sec = await db.sections.find_one({"_id": ObjectId(section_id)})
     if not sec:
         raise HTTPException(404, "Section not found")
@@ -288,7 +287,10 @@ async def analyze_section(
             if langs:
                 target_lang = langs[0]
 
-    analysis = await analyze_verse(source_text, target_lang=target_lang)
+    analysis = await analyze_verse(
+        source_text, target_lang=target_lang,
+        db=db, section_id=section_id, book_id=book_id,
+    )
     if analysis is None:
         raise HTTPException(502, "Verse analysis service unavailable")
 
@@ -409,6 +411,7 @@ async def get_section_translations(section_id: str, db: AsyncIOMotorDatabase = D
                 translatedText=t["translatedText"],
                 exactLetterTranslation=t.get("exactLetterTranslation"),
                 isApproved=t.get("isApproved", False),
+                isEditorOverride=t.get("isEditorOverride", False),
                 rejected=t.get("rejected", False),
                 approvedBy=ApprovedByRef(id=t["approvedBy"]["id"]) if t.get("approvedBy") else None,
                 createdAt=t.get("createdAt"),

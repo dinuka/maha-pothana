@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from app.models.page_status import PageStatus
+from app.models.review_status import ReviewStatus
 from app.schemas.refs import BookRef
 
 
@@ -26,6 +27,7 @@ class PageListItem(BaseModel):
     sectionCount: int = 0
     translatedPercent: float = 0
     thumbnailUrl: str | None = None
+    reviewStatus: ReviewStatus = ReviewStatus.NOT_STARTED
 
 
 class PageListResponse(BaseModel):

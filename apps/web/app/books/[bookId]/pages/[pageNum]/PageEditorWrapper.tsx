@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Lock } from "lucide-react"
-import { publicEnv } from "@/lib/env/publicEnv"
+import { apiFetchBrowser } from "@/lib/apiClientBrowser"
 import { PageStatus } from "@/lib/types"
 import PageEditor from "@/components/PageEditor"
 
@@ -49,7 +49,7 @@ export default function PageEditorWrapper({
     setIsFinalizing(true)
     setFinalizeError(null)
     try {
-      const res = await fetch(`${publicEnv.apiUrl}/api/pages/${pageId}/finalize`, {
+      const res = await apiFetchBrowser(`/api/pages/${pageId}/finalize`, {
         method: "POST",
       })
       if (!res.ok) {
@@ -64,7 +64,7 @@ export default function PageEditorWrapper({
   }, [pageId, router])
 
   const triggerDetection = useCallback(async () => {
-    const res = await fetch(`${publicEnv.apiUrl}/api/pages/${pageId}/sections/detect`, {
+    const res = await apiFetchBrowser(`/api/pages/${pageId}/sections/detect`, {
       method: "POST",
     })
     if (!res.ok) return
@@ -75,7 +75,7 @@ export default function PageEditorWrapper({
       await new Promise((r) => setTimeout(r, 1000))
       if (!pollingActiveRef.current) return
       try {
-        const pageRes = await fetch(`${publicEnv.apiUrl}/api/books/${bookId}/pages/${pageNum}`)
+        const pageRes = await apiFetchBrowser(`/api/books/${bookId}/pages/${pageNum}`)
         if (!pageRes.ok) continue
         const data = await pageRes.json()
         if (data.page.status !== "PROCESSING") {
@@ -105,7 +105,7 @@ export default function PageEditorWrapper({
         startDirty={refreshKey > 0}
         onSave={async (saveSections) => {
           const ordered = saveSections.map((s, i) => ({ ...s, sectionOrder: i }))
-          await fetch(`${publicEnv.apiUrl}/api/pages/${pageId}/sections`, {
+          await apiFetchBrowser(`/api/pages/${pageId}/sections`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(ordered),

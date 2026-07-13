@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from app.db.client import get_db
 from app.models.page_status import PageStatus, parse_page_status, with_translation_progress
+from app.models.review_status import compute_review_status
 from app.schemas.page import PageResponse, PageListItem, PageListResponse, PageImageResponse
 from app.schemas.book_organization import (
     PageReorderRequest,
@@ -38,6 +39,7 @@ async def list_pages(
     status: str | None = Query(None),
     sort: str = Query("PAGE_NUMBER"),
     filter: str | None = Query(None, alias="filter"),
+    review_status: str | None = Query(None, alias="reviewStatus"),
     sort_by: str | None = Query(None, alias="sort_by"),
     sort_order: str = Query("asc"),
     skip: int = Query(0, ge=0),
@@ -47,7 +49,11 @@ async def list_pages(
 ):
     """List pages with optional filter, sort, and pagination support."""
     filter_param = filter or status or "all"
-    use_aggregation = filter_param not in ("all", "ALL", None) or sort == "PROGRESS"
+    use_aggregation = (
+        filter_param not in ("all", "ALL", None)
+        or review_status not in ("all", "ALL", None)
+        or sort == "PROGRESS"
+    )
     sort_field = sort_by or "pageNumber"
     sort_dir = 1 if sort_order == "asc" else -1
 
@@ -55,8 +61,12 @@ async def list_pages(
         sort_field = "translation_percent"
 
     if use_aggregation:
+        # Callers pass skip/limit (offset-based), not page — derive page from skip so
+        # the aggregation path's $skip/$limit stages actually advance on scroll instead
+        # of always returning the first window.
+        effective_page = (skip // limit) + 1 if skip else page
         return await _list_pages_with_aggregation(
-            db, book_id, filter_param, sort_field, sort_dir, page, limit
+            db, book_id, filter_param, sort_field, sort_dir, effective_page, limit, review_status
         )
 
     mongo_filter: dict = {"book.id": book_id}
@@ -74,9 +84,14 @@ async def list_pages(
     items = []
     for page_doc in pages:
         page_id = str(page_doc["_id"])
-        section_count, translated_count, _ = progress_by_page.get(page_id, (0, 0, 0))
+        section_count, translated_count, approved_count, rejected_count = progress_by_page.get(
+            page_id, (0, 0, 0, 0)
+        )
         stored_status = parse_page_status(page_doc.get("status"))
         display_status = with_translation_progress(stored_status, section_count, translated_count)
+        review_status = compute_review_status(
+            section_count, translated_count, approved_count, rejected_count > 0
+        )
         thumbnail_key = page_doc.get("thumbnailKey")
         thumbnail_url = await get_presigned_url(thumbnail_key) if thumbnail_key else None
         items.append(
@@ -88,6 +103,7 @@ async def list_pages(
                 sectionCount=section_count,
                 translatedPercent=(translated_count / section_count * 100) if section_count else 0,
                 thumbnailUrl=thumbnail_url,
+                reviewStatus=review_status,
             )
         )
     return PageListResponse(items=items, total=total, skip=skip, limit=limit)
@@ -101,6 +117,7 @@ async def _list_pages_with_aggregation(
     sort_order: int,
     page: int,
     limit: int,
+    review_status_param: str | None = None,
 ) -> FilteredPageListResponse:
     """List pages with computed translation status via aggregation pipeline."""
     pipeline: list[dict] = [
@@ -133,6 +150,51 @@ async def _list_pages_with_aggregation(
                                 }
                             },
                             "translationCount": {"$size": "$translations"},
+                            "hasTranslation": {"$gt": [{"$size": "$translations"}, 0]},
+                            "hasApproval": {
+                                "$gt": [
+                                    {
+                                        "$size": {
+                                            "$filter": {
+                                                "input": "$translations",
+                                                "cond": {"$eq": ["$$this.isApproved", True]},
+                                            }
+                                        }
+                                    },
+                                    0,
+                                ]
+                            },
+                            "hasRejection": {
+                                "$and": [
+                                    {"$gt": [{"$size": "$translations"}, 0]},
+                                    {
+                                        "$eq": [
+                                            {
+                                                "$size": {
+                                                    "$filter": {
+                                                        "input": "$translations",
+                                                        "cond": {"$eq": ["$$this.rejected", True]},
+                                                    }
+                                                }
+                                            },
+                                            {"$size": "$translations"},
+                                        ]
+                                    },
+                                    {
+                                        "$eq": [
+                                            {
+                                                "$size": {
+                                                    "$filter": {
+                                                        "input": "$translations",
+                                                        "cond": {"$eq": ["$$this.isApproved", True]},
+                                                    }
+                                                }
+                                            },
+                                            0,
+                                        ]
+                                    },
+                                ]
+                            },
                         }
                     },
                     {
@@ -141,6 +203,9 @@ async def _list_pages_with_aggregation(
                             "totalSections": {"$sum": 1},
                             "approvedSections": {"$sum": "$approvedCount"},
                             "translationSum": {"$sum": "$translationCount"},
+                            "translatedSections": {"$sum": {"$cond": ["$hasTranslation", 1, 0]}},
+                            "approvedSectionsDistinct": {"$sum": {"$cond": ["$hasApproval", 1, 0]}},
+                            "rejectedSections": {"$sum": {"$cond": ["$hasRejection", 1, 0]}},
                         }
                     },
                 ],
@@ -157,6 +222,15 @@ async def _list_pages_with_aggregation(
                 },
                 "translationSum": {
                     "$ifNull": [{"$arrayElemAt": ["$sections.translationSum", 0]}, 0]
+                },
+                "translatedSectionCount": {
+                    "$ifNull": [{"$arrayElemAt": ["$sections.translatedSections", 0]}, 0]
+                },
+                "approvedSectionCountDistinct": {
+                    "$ifNull": [{"$arrayElemAt": ["$sections.approvedSectionsDistinct", 0]}, 0]
+                },
+                "rejectedSectionCount": {
+                    "$ifNull": [{"$arrayElemAt": ["$sections.rejectedSections", 0]}, 0]
                 },
             }
         },
@@ -195,12 +269,48 @@ async def _list_pages_with_aggregation(
                         0,
                     ]
                 },
+                # Mirrors compute_review_status()'s priority order exactly (rejected
+                # wins over everything else, then not-started, etc). Must be kept in
+                # sync with app/models/review_status.py if that priority chain changes.
+                # Uses the section-distinct counts (approvedSectionCountDistinct,
+                # rejectedSectionCount), not the doc-count-based approvedSectionCount
+                # that drives the legacy computedStatus above.
+                "reviewStatusComputed": {
+                    "$switch": {
+                        "branches": [
+                            {"case": {"$gt": ["$rejectedSectionCount", 0]}, "then": "REJECTED"},
+                            {"case": {"$eq": ["$sectionCount", 0]}, "then": "NOT_STARTED"},
+                            {
+                                "case": {"$eq": ["$translatedSectionCount", 0]},
+                                "then": "NO_TRANSLATIONS",
+                            },
+                            {
+                                "case": {"$lt": ["$translatedSectionCount", "$sectionCount"]},
+                                "then": "PARTIALLY_TRANSLATED",
+                            },
+                            {
+                                "case": {"$eq": ["$approvedSectionCountDistinct", 0]},
+                                "then": "FULLY_TRANSLATED",
+                            },
+                            {
+                                "case": {
+                                    "$lt": ["$approvedSectionCountDistinct", "$sectionCount"]
+                                },
+                                "then": "PARTIALLY_APPROVED",
+                            },
+                        ],
+                        "default": "FULLY_APPROVED",
+                    }
+                },
             }
         },
     ]
 
     if filter_param and filter_param != "all":
         pipeline.append({"$match": {"computedStatus": filter_param}})
+
+    if review_status_param and review_status_param not in ("all", "ALL"):
+        pipeline.append({"$match": {"reviewStatusComputed": review_status_param}})
 
     if sort_field == "translation_percent":
         pipeline.append({"$sort": {"translationPercent": sort_order}})
@@ -221,9 +331,12 @@ async def _list_pages_with_aggregation(
     stats_result = await db.pages.aggregate(stats_pipeline).to_list(length=1)
 
     # Total count for pagination
+    any_filter_active = (filter_param and filter_param != "all") or (
+        review_status_param and review_status_param not in ("all", "ALL")
+    )
     count_pipeline = [{"$match": {"book.id": book_id}}]
-    if filter_param and filter_param != "all":
-        # Re-run the full pipeline with just the filter for count
+    if any_filter_active:
+        # Re-run the full pipeline with just the filter(s) for count
         count_pipeline = pipeline[:-1] if pipeline else count_pipeline
     count_result = await db.pages.aggregate(
         count_pipeline + [{"$count": "total"}]
@@ -242,6 +355,12 @@ async def _list_pages_with_aggregation(
     for p in agg_pages:
         thumbnail_key = p.get("thumbnailKey")
         thumbnail_url = await get_presigned_url(thumbnail_key) if thumbnail_key else None
+        review_status = compute_review_status(
+            p.get("sectionCount", 0),
+            p.get("translatedSectionCount", 0),
+            p.get("approvedSectionCountDistinct", 0),
+            p.get("rejectedSectionCount", 0) > 0,
+        )
         page_list.append(
             PageWithProgress(
                 id=str(p["_id"]),
@@ -254,6 +373,7 @@ async def _list_pages_with_aggregation(
                 approvedSectionCount=p.get("approvedSectionCount", 0),
                 translationPercent=round(p.get("translationPercent", 0), 1),
                 computedStatus=p.get("computedStatus", "not_started"),
+                reviewStatus=review_status,
             )
         )
 
@@ -490,7 +610,7 @@ async def get_page(book_id: str, page_num: int, db: AsyncIOMotorDatabase = Depen
     image_url = await get_presigned_url(image_key) if image_key else None
 
     progress_by_page = await count_section_translation_progress(db, [page_id])
-    section_count, translated_count, _ = progress_by_page.get(page_id, (0, 0, 0))
+    section_count, translated_count, _, _ = progress_by_page.get(page_id, (0, 0, 0, 0))
     stored_status = parse_page_status(page.get("status"))
     display_status = with_translation_progress(stored_status, section_count, translated_count)
 
@@ -625,6 +745,10 @@ async def get_page_review(
         page_image_url = await get_presigned_url(page["imageKey"])
 
     result_sections = []
+    section_count = len(sections)
+    translated_section_count = 0
+    approved_section_count = 0
+    has_rejection = False
     for sec in sections:
         cropped_url = None
         if sec.get("croppedImageKey"):
@@ -632,6 +756,14 @@ async def get_page_review(
 
         trans_cursor = db.translations.find({"section.id": str(sec["_id"])}).sort("createdAt", 1)
         translations = await trans_cursor.to_list(length=100)
+
+        section_approved = any(t.get("isApproved") for t in translations)
+        if translations:
+            translated_section_count += 1
+        if section_approved:
+            approved_section_count += 1
+        if translations and not section_approved and all(t.get("rejected") for t in translations):
+            has_rejection = True
 
         trans_result = []
         for t in translations:
@@ -645,6 +777,7 @@ async def get_page_review(
                     translatedText=t["translatedText"],
                     exactLetterTranslation=t.get("exactLetterTranslation"),
                     isApproved=t.get("isApproved", False),
+                    isEditorOverride=t.get("isEditorOverride", False),
                     rejected=t.get("rejected", False),
                     approvedBy=ApprovedByRef(id=t["approvedBy"]["id"]) if t.get("approvedBy") else None,
                     createdAt=t.get("createdAt"),
@@ -667,6 +800,10 @@ async def get_page_review(
             "translations": trans_result,
         })
 
+    review_status = compute_review_status(
+        section_count, translated_section_count, approved_section_count, has_rejection
+    )
+
     return {
         "page": {
             "id": str(page["_id"]),
@@ -674,6 +811,7 @@ async def get_page_review(
             "imageUrl": page_image_url,
             "status": page.get("status"),
             "reviewed": page.get("reviewed", False),
+            "reviewStatus": review_status,
         },
         "sections": result_sections,
     }
@@ -691,9 +829,9 @@ async def finish_page_review(
         raise HTTPException(404, "Page not found")
 
     page_id = str(page["_id"])
-    section_count, _, approved_count = (
+    section_count, _, approved_count, _ = (
         await count_section_translation_progress(db, [page_id])
-    ).get(page_id, (0, 0, 0))
+    ).get(page_id, (0, 0, 0, 0))
     if section_count == 0 or approved_count < section_count:
         raise HTTPException(
             400,
@@ -718,9 +856,9 @@ async def finalize_page(page_id: str, db: AsyncIOMotorDatabase = Depends(get_db)
     if stored_status != PageStatus.SECTIONS_CONFIRMED:
         raise HTTPException(400, "Page sections must be confirmed before finalizing")
 
-    section_count, _, approved_count = (
+    section_count, _, approved_count, _ = (
         await count_section_translation_progress(db, [page_id])
-    ).get(page_id, (0, 0, 0))
+    ).get(page_id, (0, 0, 0, 0))
     if section_count == 0 or approved_count < section_count:
         raise HTTPException(
             400,

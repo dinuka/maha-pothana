@@ -1,9 +1,10 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 
 from app.db.client import get_db
@@ -27,6 +28,11 @@ from app.services.ai_text import estimate_extraction_cost
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["extraction"])
+
+# A generate-all run stuck in "queued"/"processing" for longer than this is treated as
+# abandoned (e.g. crashed worker) and becomes claimable again. Must comfortably exceed
+# the worst-case duration of the slowest single AI step (verse analysis).
+GENERATE_ALL_STALE_AFTER_SECONDS = 600
 
 
 @router.post("/sections/{section_id}/extract", status_code=202)
@@ -247,16 +253,18 @@ async def transliterate_section(
                     "taskId": None,
                     "message": "Transliteration already in progress",
                 }
-            return TransliterateResponse(
-                sectionId=section_id,
-                sourceText=source_text,
-                transliteratedText=existing["transliteratedText"],
-                sourceScript=existing.get("sourceScript", "unknown"),
-                targetScript=existing["targetScript"],
-                confidence=existing.get("confidence", 0.9),
-                model=existing.get("model", "gpt-4o"),
-                cached=True,
-            )
+            if status == "completed" and "transliteratedText" in existing:
+                return TransliterateResponse(
+                    sectionId=section_id,
+                    sourceText=source_text,
+                    transliteratedText=existing["transliteratedText"],
+                    sourceScript=existing.get("sourceScript", "unknown"),
+                    targetScript=existing["targetScript"],
+                    confidence=existing.get("confidence", 0.9),
+                    model=existing.get("model", "gpt-4o"),
+                    cached=True,
+                )
+            # status is "failed" or otherwise incomplete - fall through and re-queue
 
     if force:
         await db.transliterations.delete_many({
@@ -406,6 +414,7 @@ async def reverse_transliterate(
             source_script=body.sourceScript,
             target_script=body.targetScript,
             db=db,
+            section_id=section_id,
         )
 
         source_text = result.transliterated_text
@@ -447,23 +456,50 @@ async def trigger_generate_all(
     if not has_source_text and not sec.get("croppedImageKey"):
         raise HTTPException(422, "Section has no cropped image. Crop sections first.")
 
-    existing = await db.generation_runs.find_one({"sectionId": section_id})
-    if not force and existing and existing.get("status") == "completed":
-        return JSONResponse(
-            status_code=409,
-            content={"sectionId": section_id, "status": "completed"},
-        )
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(seconds=GENERATE_ALL_STALE_AFTER_SECONDS)
 
-    await db.generation_runs.update_one(
-        {"sectionId": section_id},
-        {"$set": {
-            "sectionId": section_id,
-            "status": "queued",
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
-        }},
-        upsert=True,
-    )
+    # force only makes a *completed* run re-claimable — it must never let a click
+    # steal a run that's genuinely still in flight, or "Regenerate" would recreate
+    # the exact concurrent-dispatch race this guard exists to prevent.
+    claimable_statuses = ["failed", "partial"]
+    if force:
+        claimable_statuses.append("completed")
+
+    claim_filter = {
+        "sectionId": section_id,
+        "$or": [
+            {"status": {"$in": claimable_statuses}},
+            {"status": {"$in": ["queued", "processing"]}, "updatedAt": {"$lt": stale_cutoff}},
+        ],
+    }
+
+    # A single atomic upsert: matches (and reclaims) any claimable/stale doc, or inserts
+    # a fresh one if none exists. The unique index on sectionId is what makes this safe —
+    # if a live (non-claimable) doc already exists, the filter won't match it, Mongo tries
+    # to insert a new one instead, and the unique index rejects that with DuplicateKeyError.
+    try:
+        await db.generation_runs.find_one_and_update(
+            claim_filter,
+            {
+                "$set": {"status": "queued", "updatedAt": now},
+                "$setOnInsert": {"sectionId": section_id, "createdAt": now},
+            },
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        existing = await db.generation_runs.find_one({"sectionId": section_id})
+        if (existing or {}).get("status") == "completed":
+            return JSONResponse(
+                status_code=409,
+                content={"sectionId": section_id, "status": "completed"},
+            )
+        # A live run (queued/processing, not yet stale) already owns this section —
+        # resume watching it instead of dispatching a duplicate task.
+        return JSONResponse(
+            status_code=202,
+            content={"sectionId": section_id, "status": (existing or {}).get("status", "processing")},
+        )
 
     from app.tasks.generate_section_all import generate_section_all
 

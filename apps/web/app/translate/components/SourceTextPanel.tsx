@@ -62,7 +62,7 @@ export const SourceTextPanel = ({
   const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
 
   const displayText = showAI && aiExtractedText ? aiExtractedText : originalText
-  const fontSize = 14 * (zoom / 100)
+  const fontSize = 22 * (zoom / 100)
 
   useEffect(() => {
     if (editing && textareaRef.current) {

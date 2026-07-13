@@ -54,7 +54,7 @@ async def _extract_section_text(section_id: str):
         logger.info("[extract_section_text] calling extract_text (OpenRouter)...")
         start_time = time.monotonic()
         try:
-            result = await extract_text(image_data, db=db)
+            result = await extract_text(image_data, db=db, section_id=section_id)
             elapsed = int((time.monotonic() - start_time) * 1000)
             logger.info("[extract_section_text] extract_text completed: text=%d chars, confidence=%.2f, model=%s, time=%dms",
                         len(result.text), result.confidence, result.model, elapsed)

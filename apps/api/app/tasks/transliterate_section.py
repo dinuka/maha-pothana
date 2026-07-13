@@ -57,6 +57,8 @@ async def _transliterate_section(section_id: str, target_script: str):
                 source_script=source_script,
                 target_script=target_script,
                 db=db,
+                section_id=section_id,
+                book_id=book_id,
             )
         except ValueError as e:
             error_msg = str(e)
